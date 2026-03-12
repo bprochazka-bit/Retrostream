@@ -1,0 +1,32 @@
+# Super Mario World (SNES) memory map
+# Based on RetroAchievements / BSNES memory documentation
+
+lives:
+  addr: 0x0DBE
+  type: u8
+
+coins:
+  addr: 0x0DBF
+  type: u8
+
+world:
+  addr: 0x0760
+  type: u8
+
+score:
+  addr: 0x0F34
+  type: u24
+  endian: little
+
+powerup:
+  addr: 0x0019
+  type: u8
+  # 0=small, 1=big, 2=fire, 3=cape, 4=balloon, 9=yoshi
+
+time_hundreds:
+  addr: 0x0F31
+  type: u8
+
+time_tens:
+  addr: 0x0F32
+  type: u8

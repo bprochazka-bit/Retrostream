@@ -1,0 +1,26 @@
+# Super Mario Bros (NES) memory map
+
+lives:
+  addr: 0x075A
+  type: u8
+
+world:
+  addr: 0x075F
+  type: u8
+
+level:
+  addr: 0x0760
+  type: u8
+
+coins:
+  addr: 0x075E
+  type: u8
+
+score_1:
+  addr: 0x07DD
+  type: u8
+
+powerup:
+  addr: 0x0756
+  type: u8
+  # 0=small, 1=big, 2=fire

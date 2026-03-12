@@ -1,0 +1,23 @@
+version: "3.9"
+
+services:
+  retrostream:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./cores:/app/cores:ro
+      - ./roms:/app/roms:ro
+      - ./configs:/app/configs:ro
+      - ./saves:/app/saves
+      - ./system:/app/system:ro
+    devices:
+      - /dev/dri/renderD128:/dev/dri/renderD128
+      - /dev/dri/card0:/dev/dri/card0
+    environment:
+      - VAAPI_DEVICE=/dev/dri/renderD128
+      - ENCODE_BACKEND=auto
+    group_add:
+      - video
+      - render
+    restart: unless-stopped
