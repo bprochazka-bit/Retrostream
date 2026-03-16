@@ -494,12 +494,16 @@
       </select>
     </div>
     <div>
-      <label>Core Path (for new sessions)</label>
-      <input id="core-path" type="text" placeholder="cores/snes9x_libretro.so" />
+      <label>ROM (for new sessions)</label>
+      <select id="rom-path">
+        <option value="">Loading ROMs...</option>
+      </select>
     </div>
     <div>
-      <label>ROM Path (for new sessions)</label>
-      <input id="rom-path" type="text" placeholder="roms/game.sfc" />
+      <label>Core (for new sessions)</label>
+      <select id="core-path">
+        <option value="">Loading cores...</option>
+      </select>
     </div>
     <button id="join-btn">Connect</button>
   </div>
@@ -638,10 +642,10 @@ $("join-btn").addEventListener("click", async () => {
   try {
     if (!sessionId) {
       // Create a new session
-      const core = $("core-path").value.trim();
-      const rom  = $("rom-path").value.trim();
+      const core = $("core-path").value;
+      const rom  = $("rom-path").value;
       if (!core || !rom) {
-        alert("Enter a core path and ROM path to create a new session.");
+        alert("Select a ROM and core to create a new session.");
         setStatus("disconnected"); return;
       }
       const res = await fetch(`${state.serverUrl}/api/sessions`, {
@@ -990,6 +994,127 @@ function escHtml(s) {
 }
 
 // ============================================================
+// ROM / Core dropdown population
+// ============================================================
+
+// Map ROM file extensions to likely core name substrings (best match first)
+const EXT_TO_CORES = {
+  ".sfc":  ["snes9x", "bsnes", "mesen-s"],
+  ".smc":  ["snes9x", "bsnes", "mesen-s"],
+  ".nes":  ["mesen", "nestopia", "fceumm"],
+  ".gb":   ["gambatte", "mgba", "sameboy"],
+  ".gbc":  ["gambatte", "mgba", "sameboy"],
+  ".gba":  ["mgba", "vba_next", "gpsp"],
+  ".n64":  ["mupen64plus_next", "mupen64plus", "parallel_n64"],
+  ".z64":  ["mupen64plus_next", "mupen64plus", "parallel_n64"],
+  ".v64":  ["mupen64plus_next", "mupen64plus", "parallel_n64"],
+  ".gen":  ["genesis_plus_gx", "picodrive", "blastem"],
+  ".md":   ["genesis_plus_gx", "picodrive", "blastem"],
+  ".smd":  ["genesis_plus_gx", "picodrive", "blastem"],
+  ".sms":  ["genesis_plus_gx", "picodrive"],
+  ".gg":   ["genesis_plus_gx", "gearsystem"],
+  ".pce":  ["mednafen_pce", "beetle_pce"],
+  ".a26":  ["stella"],
+  ".a78":  ["prosystem"],
+  ".lnx":  ["handy", "mednafen_lynx"],
+  ".ngp":  ["mednafen_ngp", "beetle_ngp"],
+  ".ngc":  ["mednafen_ngp", "beetle_ngp"],
+  ".ws":   ["mednafen_wswan", "beetle_wswan"],
+  ".wsc":  ["mednafen_wswan", "beetle_wswan"],
+  ".nds":  ["desmume", "melonds"],
+  ".3ds":  ["citra"],
+  ".iso":  ["mednafen_psx", "beetle_psx", "pcsx_rearmed", "dolphin"],
+  ".bin":  ["mednafen_psx", "beetle_psx", "pcsx_rearmed", "genesis_plus_gx"],
+  ".cue":  ["mednafen_psx", "beetle_psx", "pcsx_rearmed"],
+  ".chd":  ["mednafen_psx", "beetle_psx", "pcsx_rearmed"],
+  ".pbp":  ["ppsspp"],
+  ".cso":  ["ppsspp"],
+  ".vb":   ["mednafen_vb", "beetle_vb"],
+};
+
+let _loadedRoms = [];
+let _loadedCores = [];
+
+async function populateDropdowns() {
+  const base = ($("server-url").value || "http://localhost:8000").replace(/\/$/, "");
+  try {
+    const [roms, cores] = await Promise.all([
+      fetch(`${base}/api/roms`).then(r => r.json()),
+      fetch(`${base}/api/cores/installed`).then(r => r.json()),
+    ]);
+    _loadedRoms = roms;
+    _loadedCores = cores;
+
+    // Populate ROM dropdown
+    const romSel = $("rom-path");
+    romSel.innerHTML = "";
+    if (roms.length === 0) {
+      romSel.innerHTML = '<option value="">No ROMs found in roms/</option>';
+    } else {
+      romSel.innerHTML = '<option value="">-- Select a ROM --</option>';
+      for (const r of roms) {
+        const opt = document.createElement("option");
+        opt.value = r.path;
+        opt.textContent = r.filename;
+        romSel.appendChild(opt);
+      }
+    }
+
+    // Populate core dropdown
+    populateCoreDropdown(cores);
+
+  } catch (e) {
+    console.error("Failed to populate dropdowns:", e);
+    $("rom-path").innerHTML = '<option value="">Failed to load ROMs</option>';
+    $("core-path").innerHTML = '<option value="">Failed to load cores</option>';
+  }
+}
+
+function populateCoreDropdown(cores) {
+  const coreSel = $("core-path");
+  coreSel.innerHTML = "";
+  if (cores.length === 0) {
+    coreSel.innerHTML = '<option value="">No cores installed (use Cores button)</option>';
+  } else {
+    coreSel.innerHTML = '<option value="">-- Select a core --</option>';
+    for (const c of cores) {
+      const opt = document.createElement("option");
+      opt.value = c.path;
+      opt.textContent = `${c.name} (${c.filename})`;
+      coreSel.appendChild(opt);
+    }
+  }
+}
+
+function autoSelectCore() {
+  const romPath = $("rom-path").value;
+  if (!romPath || _loadedCores.length === 0) return;
+
+  const ext = "." + romPath.split(".").pop().toLowerCase();
+  const candidates = EXT_TO_CORES[ext];
+  if (!candidates) return;
+
+  // Find the best matching installed core
+  for (const candidate of candidates) {
+    const match = _loadedCores.find(c =>
+      c.name.toLowerCase().includes(candidate.toLowerCase())
+    );
+    if (match) {
+      $("core-path").value = match.path;
+      return;
+    }
+  }
+}
+
+$("rom-path").addEventListener("change", autoSelectCore);
+
+// Re-populate when server URL changes
+$("server-url").addEventListener("change", populateDropdowns);
+
+// Load on startup
+populateDropdowns();
+
+// ============================================================
 // Core Manager
 // ============================================================
 
@@ -1167,7 +1292,7 @@ async function coreAction(action, name, btn) {
       const data = await res.json();
       status.textContent = `Installed ${data.filename} (${(data.size_bytes/1024).toFixed(0)} KB)`;
       btn.textContent = "Done!";
-      setTimeout(() => loadCoreTab(), 1000);
+      setTimeout(() => { loadCoreTab(); populateDropdowns(); }, 1000);
     } else if (action === "delete") {
       const res = await fetch(`${base}/api/cores/${encodeURIComponent(name)}`, {
         method: "DELETE",
@@ -1177,7 +1302,7 @@ async function coreAction(action, name, btn) {
         throw new Error(err.detail || `HTTP ${res.status}`);
       }
       status.textContent = `Deleted ${name}`;
-      setTimeout(() => loadCoreTab(), 500);
+      setTimeout(() => { loadCoreTab(); populateDropdowns(); }, 500);
     }
   } catch (err) {
     status.textContent = `Error: ${err.message}`;
