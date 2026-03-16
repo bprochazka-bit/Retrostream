@@ -17,6 +17,10 @@ Routes:
     GET    /api/cores/updates       Check for core updates
     DELETE /api/cores/{name}        Delete an installed core
 
+    GET  /api/roms                  List available ROMs
+
+    GET  /admin                     Admin dashboard
+
     POST /rtc/offer/{sid}           WebRTC SDP offer → answer
 
     WS   /ws/input/{sid}            Input WebSocket (per client)
@@ -193,6 +197,38 @@ async def delete_core(core_name: str):
 
 
 # ---------------------------------------------------------------------------
+# REST — ROM listing
+# ---------------------------------------------------------------------------
+
+ROM_EXTENSIONS = {
+    ".nes", ".sfc", ".smc", ".gb", ".gbc", ".gba", ".n64", ".z64", ".v64",
+    ".gen", ".md", ".smd", ".gg", ".sms", ".pce", ".ngp", ".ngc", ".ws",
+    ".wsc", ".a26", ".a78", ".lnx", ".jag", ".vb", ".nds", ".3ds",
+    ".iso", ".bin", ".cue", ".chd", ".pbp", ".cso",
+    ".zip", ".7z",
+}
+
+roms_dir = Path("roms")
+
+
+@app.get("/api/roms")
+async def list_roms():
+    if not roms_dir.exists():
+        return []
+    roms = []
+    for f in sorted(roms_dir.rglob("*")):
+        if f.is_file() and f.suffix.lower() in ROM_EXTENSIONS:
+            roms.append({
+                "name": f.stem,
+                "filename": f.name,
+                "path": str(f),
+                "size_bytes": f.stat().st_size,
+                "extension": f.suffix.lower(),
+            })
+    return roms
+
+
+# ---------------------------------------------------------------------------
 # WebRTC signaling
 # ---------------------------------------------------------------------------
 
@@ -362,6 +398,14 @@ async def ws_chat(websocket: WebSocket, session_id: str):
 # Frontend fallback
 # ---------------------------------------------------------------------------
 
+@app.get("/admin")
+async def admin_dashboard():
+    admin_file = frontend_path / "admin.html"
+    if admin_file.exists():
+        return HTMLResponse(admin_file.read_text())
+    raise HTTPException(status_code=404, detail="Admin page not found")
+
+
 @app.get("/")
 async def root():
     index = frontend_path / "index.html"
@@ -374,6 +418,7 @@ async def root():
     <ul>
       <li><a href="/docs">API Docs (Swagger)</a></li>
       <li><a href="/api/status">Server Status</a></li>
+      <li><a href="/admin">Admin Dashboard</a></li>
     </ul>
     </body></html>
     """)
