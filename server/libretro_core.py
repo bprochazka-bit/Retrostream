@@ -25,12 +25,23 @@ log = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # libretro constants
 # ---------------------------------------------------------------------------
-RETRO_ENVIRONMENT_GET_SYSTEM_DIRECTORY   = 9
-RETRO_ENVIRONMENT_SET_PIXEL_FORMAT       = 10
-RETRO_ENVIRONMENT_GET_VARIABLE           = 15
-RETRO_ENVIRONMENT_GET_VARIABLE_UPDATE    = 17
-RETRO_ENVIRONMENT_GET_LOG_INTERFACE      = 27
-RETRO_ENVIRONMENT_GET_SAVE_DIRECTORY     = 31
+RETRO_ENVIRONMENT_SET_ROTATION                = 1
+RETRO_ENVIRONMENT_GET_OVERSCAN                = 2
+RETRO_ENVIRONMENT_GET_CAN_DUPE                = 3
+RETRO_ENVIRONMENT_GET_SYSTEM_DIRECTORY        = 9
+RETRO_ENVIRONMENT_SET_PIXEL_FORMAT            = 10
+RETRO_ENVIRONMENT_SET_INPUT_DESCRIPTORS       = 11
+RETRO_ENVIRONMENT_GET_VARIABLE                = 15
+RETRO_ENVIRONMENT_SET_VARIABLES               = 16
+RETRO_ENVIRONMENT_GET_VARIABLE_UPDATE         = 17
+RETRO_ENVIRONMENT_SET_SUPPORT_NO_GAME         = 18
+RETRO_ENVIRONMENT_GET_LOG_INTERFACE           = 27
+RETRO_ENVIRONMENT_SET_SUBSYSTEM_INFO          = 30
+RETRO_ENVIRONMENT_GET_SAVE_DIRECTORY          = 31
+RETRO_ENVIRONMENT_SET_GEOMETRY                = 37
+RETRO_ENVIRONMENT_GET_CORE_OPTIONS_VERSION    = 52
+RETRO_ENVIRONMENT_SET_CORE_OPTIONS            = 53
+RETRO_ENVIRONMENT_SET_CORE_OPTIONS_V2_INTL    = 68
 
 RETRO_PIXEL_FORMAT_0RGB1555 = 0
 RETRO_PIXEL_FORMAT_XRGB8888 = 1
@@ -111,6 +122,7 @@ class RetroVariable(ctypes.Structure):
 EnvCallbackType    = ctypes.CFUNCTYPE(ctypes.c_bool, ctypes.c_uint, ctypes.c_void_p)
 VideoCallbackType  = ctypes.CFUNCTYPE(None, ctypes.c_void_p, ctypes.c_uint,
                                       ctypes.c_uint, ctypes.c_size_t)
+AudioSampleType    = ctypes.CFUNCTYPE(None, ctypes.c_int16, ctypes.c_int16)
 AudioCallbackType  = ctypes.CFUNCTYPE(None, ctypes.POINTER(ctypes.c_int16), ctypes.c_size_t)
 InputPollType      = ctypes.CFUNCTYPE(None)
 InputStateType     = ctypes.CFUNCTYPE(ctypes.c_int16, ctypes.c_uint, ctypes.c_uint,
@@ -178,6 +190,7 @@ class LibretroCore:
         lib.retro_get_system_av_info.restype = None
         lib.retro_set_environment.restype   = None
         lib.retro_set_video_refresh.restype = None
+        lib.retro_set_audio_sample.restype       = None
         lib.retro_set_audio_sample_batch.restype = None
         lib.retro_set_input_poll.restype    = None
         lib.retro_set_input_state.restype   = None
@@ -193,41 +206,128 @@ class LibretroCore:
 
     def _install_callbacks(self):
         # Keep references so CPython doesn't GC the cfunctype wrappers
-        self._cb_env   = EnvCallbackType(self._env_callback)
-        self._cb_video = VideoCallbackType(self._video_callback)
-        self._cb_audio = AudioCallbackType(self._audio_callback)
-        self._cb_poll  = InputPollType(self._input_poll)
-        self._cb_state = InputStateType(self._input_state)
+        self._cb_env          = EnvCallbackType(self._env_callback)
+        self._cb_video        = VideoCallbackType(self._video_callback)
+        self._cb_audio_sample = AudioSampleType(self._audio_sample_callback)
+        self._cb_audio        = AudioCallbackType(self._audio_callback)
+        self._cb_poll         = InputPollType(self._input_poll)
+        self._cb_state        = InputStateType(self._input_state)
 
+        log.info("Installing callbacks...")
+        log.info("  retro_set_environment...")
         self._lib.retro_set_environment(self._cb_env)
+        log.info("  retro_set_environment OK")
+        log.info("  retro_set_video_refresh...")
         self._lib.retro_set_video_refresh(self._cb_video)
+        log.info("  retro_set_video_refresh OK")
+        log.info("  retro_set_audio_sample...")
+        self._lib.retro_set_audio_sample(self._cb_audio_sample)
+        log.info("  retro_set_audio_sample OK")
+        log.info("  retro_set_audio_sample_batch...")
         self._lib.retro_set_audio_sample_batch(self._cb_audio)
+        log.info("  retro_set_audio_sample_batch OK")
+        log.info("  retro_set_input_poll...")
         self._lib.retro_set_input_poll(self._cb_poll)
+        log.info("  retro_set_input_poll OK")
+        log.info("  retro_set_input_state...")
         self._lib.retro_set_input_state(self._cb_state)
+        log.info("  All callbacks installed OK")
 
     # ------------------------------------------------------------------
     # libretro callbacks (called from C)
     # ------------------------------------------------------------------
     def _env_callback(self, cmd: int, data: ctypes.c_void_p) -> bool:
+        try:
+            return self._env_callback_inner(cmd, data)
+        except Exception as e:
+            log.error("ENV exception on cmd=%d (0x%x): %s", cmd, cmd, e)
+            return False
+
+    def _env_callback_inner(self, cmd: int, data: ctypes.c_void_p) -> bool:
         if cmd == RETRO_ENVIRONMENT_SET_PIXEL_FORMAT:
             fmt = ctypes.cast(data, ctypes.POINTER(ctypes.c_int)).contents.value
             self._pixel_fmt = fmt
             log.info("ENV SET_PIXEL_FORMAT: %d (%s)", fmt,
                      {0: "0RGB1555", 1: "XRGB8888", 2: "RGB565"}.get(fmt, "unknown"))
             return True
+
+        if cmd == RETRO_ENVIRONMENT_GET_CAN_DUPE:
+            # Tell core we support frame duplication (NULL video data = repeat last frame)
+            ptr = ctypes.cast(data, ctypes.POINTER(ctypes.c_bool))
+            ptr[0] = True
+            log.info("ENV GET_CAN_DUPE -> true")
+            return True
+
         if cmd == RETRO_ENVIRONMENT_GET_SYSTEM_DIRECTORY:
             ptr = ctypes.cast(data, ctypes.POINTER(ctypes.c_char_p))
             ptr[0] = self.system_dir
             log.info("ENV GET_SYSTEM_DIRECTORY -> %s", self.system_dir)
             return True
+
         if cmd == RETRO_ENVIRONMENT_GET_SAVE_DIRECTORY:
             ptr = ctypes.cast(data, ctypes.POINTER(ctypes.c_char_p))
             ptr[0] = self.save_dir
             log.info("ENV GET_SAVE_DIRECTORY -> %s", self.save_dir)
             return True
+
+        if cmd == RETRO_ENVIRONMENT_GET_VARIABLE:
+            # Core is requesting a variable value — return NULL (no override)
+            if data:
+                var = ctypes.cast(data, ctypes.POINTER(RetroVariable))
+                key = var[0].key
+                log.info("ENV GET_VARIABLE: key=%s -> None", key)
+                var[0].value = None
+            return True
+
+        if cmd == RETRO_ENVIRONMENT_GET_VARIABLE_UPDATE:
+            # "Have variables been updated?" — no
+            if data:
+                ptr = ctypes.cast(data, ctypes.POINTER(ctypes.c_bool))
+                ptr[0] = False
+            return True
+
+        if cmd == RETRO_ENVIRONMENT_SET_VARIABLES:
+            log.info("ENV SET_VARIABLES: acknowledged")
+            return True
+
+        if cmd == RETRO_ENVIRONMENT_SET_SUPPORT_NO_GAME:
+            log.info("ENV SET_SUPPORT_NO_GAME: acknowledged")
+            return True
+
+        if cmd == RETRO_ENVIRONMENT_SET_INPUT_DESCRIPTORS:
+            log.info("ENV SET_INPUT_DESCRIPTORS: acknowledged")
+            return True
+
+        if cmd == RETRO_ENVIRONMENT_GET_CORE_OPTIONS_VERSION:
+            # Tell core we support options v0 (basic)
+            ptr = ctypes.cast(data, ctypes.POINTER(ctypes.c_uint))
+            ptr[0] = 0
+            log.info("ENV GET_CORE_OPTIONS_VERSION -> 0")
+            return True
+
+        if cmd == RETRO_ENVIRONMENT_SET_CORE_OPTIONS:
+            log.info("ENV SET_CORE_OPTIONS: acknowledged")
+            return True
+
+        if cmd == RETRO_ENVIRONMENT_SET_CORE_OPTIONS_V2_INTL:
+            log.info("ENV SET_CORE_OPTIONS_V2_INTL: acknowledged")
+            return True
+
         if cmd == RETRO_ENVIRONMENT_GET_LOG_INTERFACE:
             log.info("ENV GET_LOG_INTERFACE -> declined")
             return False
+
+        if cmd == RETRO_ENVIRONMENT_SET_GEOMETRY:
+            log.info("ENV SET_GEOMETRY: acknowledged")
+            return True
+
+        if cmd == RETRO_ENVIRONMENT_GET_OVERSCAN:
+            if data:
+                ptr = ctypes.cast(data, ctypes.POINTER(ctypes.c_bool))
+                ptr[0] = False
+            log.info("ENV GET_OVERSCAN -> false")
+            return True
+
         log.info("ENV unhandled cmd=%d (0x%x), data=%s", cmd, cmd, data)
         return False
 
@@ -243,6 +343,9 @@ class LibretroCore:
             # Convert to raw RGB24 bytes regardless of source pixel format
             raw = self._pixels_to_rgb24(data, width, height, pitch)
             self.on_frame(raw, width, height)
+
+    def _audio_sample_callback(self, left: int, right: int):
+        pass  # single-sample callback — most cores use the batch version
 
     def _audio_callback(self, data: ctypes.POINTER(ctypes.c_int16),
                         frames: int) -> int:
