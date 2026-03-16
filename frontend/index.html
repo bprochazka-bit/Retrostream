@@ -59,8 +59,11 @@
       border-radius: 12px;
       background: #1a1a1a;
       border: 1px solid #333;
+      font-family: inherit;
+      cursor: default;
     }
-    #connection-status.connected    { border-color: #00ff88; color: #00ff88; }
+    #connection-status.connected    { border-color: #00ff88; color: #00ff88; cursor: pointer; }
+    #connection-status.connected:hover { background: rgba(0,255,136,0.1); }
     #connection-status.connecting   { border-color: #ffa500; color: #ffa500; }
     #connection-status.disconnected { border-color: #e94560; color: #e94560; }
 
@@ -720,7 +723,7 @@
   <div id="session-badge">No session</div>
   <button class="header-btn" id="cores-btn">Cores</button>
   <button class="header-btn" id="keybind-btn">Controls</button>
-  <div id="connection-status" class="disconnected">Disconnected</div>
+  <button id="connection-status" class="disconnected">Disconnected</button>
 </header>
 
 <!-- Main content -->
@@ -1137,12 +1140,26 @@ function connectInputWS() {
   };
 }
 
-function sendInput() {
+// Coalesce input sends: at most one WS message per animation frame
+// to prevent message backpressure that causes progressive lag.
+let _inputDirty = false;
+let _inputRafId = 0;
+
+function _flushInput() {
+  _inputRafId = 0;
   if (state.inputWs?.readyState === WebSocket.OPEN && state.role === "player") {
     state.inputWs.send(JSON.stringify({
       client_id: state.clientId,
       buttons:   state.buttons,
     }));
+  }
+  _inputDirty = false;
+}
+
+function sendInput() {
+  _inputDirty = true;
+  if (!_inputRafId) {
+    _inputRafId = requestAnimationFrame(_flushInput);
   }
 }
 
@@ -1470,8 +1487,45 @@ updateControlsHint();
 
 function setStatus(s) {
   statusEl.className = s;
-  statusEl.textContent = s.charAt(0).toUpperCase() + s.slice(1);
+  statusEl.textContent = s === "connected" ? "Connected \u2022 Disconnect" :
+                         s.charAt(0).toUpperCase() + s.slice(1);
 }
+
+function disconnectSession() {
+  if (!state.connected) return;
+  state.connected = false;
+
+  // Cancel any pending input send
+  if (_inputRafId) { cancelAnimationFrame(_inputRafId); _inputRafId = 0; }
+
+  // Close all WebSockets
+  if (state.inputWs)  { state.inputWs.close();  state.inputWs  = null; }
+  if (state.memoryWs) { state.memoryWs.close(); state.memoryWs = null; }
+  if (state.chatWs)   { state.chatWs.close();   state.chatWs   = null; }
+
+  // Close WebRTC peer connection
+  if (state.pc) { state.pc.close(); state.pc = null; }
+
+  // Stop game audio
+  if (state.gameAudio) {
+    state.gameAudio.pause();
+    state.gameAudio.srcObject = null;
+    state.gameAudio = null;
+  }
+
+  // Reset video
+  video.srcObject = null;
+  overlay.style.display = "";
+  $("reset-btn").classList.remove("visible");
+
+  setStatus("disconnected");
+  clearSessionState();
+  $("join-modal").classList.remove("hidden");
+}
+
+statusEl.addEventListener("click", () => {
+  if (state.connected) disconnectSession();
+});
 
 function updatePlayerList() {
   const list = $("player-list");
