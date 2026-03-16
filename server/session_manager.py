@@ -12,7 +12,6 @@ from pathlib import Path
 from typing import Optional
 
 from .session import GameSession, SessionConfig
-from .encode_queue import encode_manager
 
 log = logging.getLogger(__name__)
 
@@ -69,7 +68,7 @@ class SessionManager:
         return {
             "active_sessions": len(self._sessions),
             "sessions":        self.list_sessions(),
-            "encoders":        encode_manager.stats_summary(),
+            "active_tracks":   len(self._sessions),
         }
 
     async def shutdown(self):
