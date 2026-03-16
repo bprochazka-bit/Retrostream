@@ -215,11 +215,11 @@ class LibretroAudioTrack(AudioStreamTrack):
             num_samples = 960
             samples_array = np.zeros(num_samples * 2, dtype=np.int16)
 
-        # Reshape to (channels, samples) for av — planar format s16p
-        stereo = samples_array.reshape(-1, 2).T.copy()  # shape: (2, num_samples), contiguous
+        # Pack as (1, total_samples) for av s16 packed format (required by Opus encoder)
+        packed = samples_array.reshape(1, -1)  # shape: (1, num_samples*2)
 
         frame = av.AudioFrame.from_ndarray(
-            stereo, format='s16p', layout='stereo'
+            packed, format='s16', layout='stereo'
         )
         frame.sample_rate = self._sample_rate
         frame.pts = self._pts
