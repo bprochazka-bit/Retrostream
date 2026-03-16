@@ -89,6 +89,7 @@ class LibretroVideoTrack(VideoStreamTrack):
         self._latest_frame: Optional[bytes] = None
         self._frame_event = asyncio.Event()
         self._stopped = False
+        self._started = False  # send black frame immediately on first recv
 
     def push_frame(self, rgb24: bytes):
         """Called from the core thread. Stores frame and signals waiters."""
@@ -100,20 +101,29 @@ class LibretroVideoTrack(VideoStreamTrack):
 
     async def recv(self):
         """Called by aiortc to get the next video frame."""
-        # Wait for a frame to be available
+        if not self._started:
+            # Send a black frame immediately so WebRTC negotiation completes fast
+            self._started = True
+            frame = av.VideoFrame(self._width, self._height, 'rgb24')
+            frame.pts = self._pts
+            frame.time_base = self._time_base
+            self._pts += int(90000 / self._fps)
+            return frame
+
+        # Wait for a real frame from the core
         while not self._stopped:
             try:
-                await asyncio.wait_for(self._frame_event.wait(), timeout=1.0)
+                await asyncio.wait_for(self._frame_event.wait(), timeout=0.5)
                 break
             except asyncio.TimeoutError:
-                # Return a black frame to keep the connection alive
-                if self._latest_frame is None:
-                    frame = av.VideoFrame(self._width, self._height, 'rgb24')
-                    frame.pts = self._pts
-                    frame.time_base = self._time_base
-                    self._pts += int(90000 / self._fps)
-                    return frame
-                break
+                if self._latest_frame is not None:
+                    break
+                # No frame yet — return last or black
+                frame = av.VideoFrame(self._width, self._height, 'rgb24')
+                frame.pts = self._pts
+                frame.time_base = self._time_base
+                self._pts += int(90000 / self._fps)
+                return frame
 
         self._frame_event.clear()
         rgb24 = self._latest_frame
