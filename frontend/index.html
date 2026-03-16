@@ -1000,9 +1000,9 @@ function escHtml(s) {
 
 // Map ROM file extensions to likely core name substrings (best match first)
 const EXT_TO_CORES = {
-  ".sfc":  ["snes9x", "bsnes", "mesen-s"],
-  ".smc":  ["snes9x", "bsnes", "mesen-s"],
-  ".nes":  ["mesen", "nestopia", "fceumm"],
+  ".sfc":  ["snes9x", "bsnes"],
+  ".smc":  ["snes9x", "bsnes"],
+  ".nes":  ["fceumm", "nestopia"],
   ".gb":   ["gambatte", "mgba", "sameboy"],
   ".gbc":  ["gambatte", "mgba", "sameboy"],
   ".gba":  ["mgba", "vba_next", "gpsp"],

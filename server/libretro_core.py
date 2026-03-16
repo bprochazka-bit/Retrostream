@@ -208,6 +208,7 @@ class LibretroCore:
 
         # HW render state
         self._hw_render: Optional[ctypes.POINTER(RetroHWRenderCallback)] = None
+        self._hw_render_requested = False
         self._egl_display = None
         self._egl_context = None
         self._egl_surface = None
@@ -220,6 +221,13 @@ class LibretroCore:
 
         self._bind_functions()
         self._install_callbacks()
+
+        if self._hw_render_requested:
+            raise RuntimeError(
+                f"Core '{self.core_path.name}' requires hardware OpenGL rendering "
+                f"(GET_HW_RENDER_INTERFACE) which is not supported in headless mode. "
+                f"Use a software-rendered core instead (e.g. nestopia, fceumm, snes9x, gambatte)."
+            )
 
     # ------------------------------------------------------------------
     # Setup
@@ -260,6 +268,14 @@ class LibretroCore:
         log.info("  retro_set_environment...")
         self._lib.retro_set_environment(self._cb_env)
         log.info("  retro_set_environment OK")
+
+        # If the core requested GET_HW_RENDER_INTERFACE during set_environment,
+        # it requires a GPU/display context. Don't call remaining set_* functions
+        # as they may hang trying to init OpenGL (e.g. Mesen).
+        if self._hw_render_requested:
+            log.warning("  Core requires HW rendering — skipping remaining callbacks")
+            return
+
         log.info("  retro_set_video_refresh...")
         self._lib.retro_set_video_refresh(self._cb_video)
         log.info("  retro_set_video_refresh OK")
@@ -400,7 +416,8 @@ class LibretroCore:
             return False
 
         if cmd == RETRO_ENVIRONMENT_GET_HW_RENDER_INTERFACE:
-            log.info("ENV GET_HW_RENDER_INTERFACE -> declined (not needed for basic GL)")
+            log.warning("ENV GET_HW_RENDER_INTERFACE -> declined (headless, no GPU context)")
+            self._hw_render_requested = True
             return False
 
         log.info("ENV unhandled cmd=%d (0x%x), data=%s", cmd, cmd, data)
