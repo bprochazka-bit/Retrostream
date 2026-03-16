@@ -39,6 +39,19 @@
       font-size: 0.75rem;
       color: #a0a0c0;
     }
+    .header-btn {
+      background: #16213e;
+      border: 1px solid #0f3460;
+      border-radius: 4px;
+      color: #a0a0c0;
+      padding: 5px 12px;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 0.75rem;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+    .header-btn:hover { border-color: #e94560; color: #e94560; }
     #connection-status {
       margin-left: auto;
       font-size: 0.8rem;
@@ -74,8 +87,7 @@
       image-rendering: pixelated;
       image-rendering: crisp-edges;
       border: 2px solid #1a1a2e;
-      /* Scale up the tiny retro resolution nicely */
-      width: min(80vw, calc(80vh * 1.14));   /* ~256/224 aspect ratio */
+      width: min(80vw, calc(80vh * 1.14));
       height: auto;
       background: #111;
     }
@@ -239,7 +251,9 @@
       border: 1px solid #0f3460;
       border-radius: 8px;
       padding: 32px;
-      width: 380px;
+      width: 440px;
+      max-height: 90vh;
+      overflow-y: auto;
       display: flex;
       flex-direction: column;
       gap: 16px;
@@ -282,6 +296,303 @@
     }
     .modal-box button:hover { background: #ff2d55; }
 
+    /* Active sessions list in join modal */
+    .session-list-section { margin-top: -8px; }
+    .session-list-section h3 {
+      font-size: 0.7rem;
+      letter-spacing: 2px;
+      color: #555;
+      text-transform: uppercase;
+      margin-bottom: 6px;
+    }
+    #active-sessions-list {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      max-height: 150px;
+      overflow-y: auto;
+      scrollbar-width: thin;
+      scrollbar-color: #333 transparent;
+    }
+    .session-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 10px;
+      background: #0d0d1a;
+      border: 1px solid #0f3460;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.8rem;
+    }
+    .session-row:hover { border-color: #e94560; }
+    .session-row .session-info { flex: 1; }
+    .session-row .session-id-label { color: #e94560; font-weight: bold; }
+    .session-row .session-meta { color: #666; font-size: 0.7rem; }
+
+    /* ── Core manager modal ── */
+    #core-modal {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.85);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+    }
+    #core-modal.hidden { display: none; }
+    .core-modal-box {
+      background: #1a1a2e;
+      border: 1px solid #0f3460;
+      border-radius: 8px;
+      padding: 24px;
+      width: 600px;
+      max-height: 80vh;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .core-modal-box h2 {
+      color: #e94560;
+      font-size: 1.1rem;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+    }
+    .core-tabs {
+      display: flex;
+      gap: 8px;
+    }
+    .core-tab {
+      background: #0d0d1a;
+      border: 1px solid #0f3460;
+      border-radius: 4px;
+      color: #888;
+      padding: 6px 14px;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 0.8rem;
+    }
+    .core-tab.active { border-color: #e94560; color: #e94560; }
+    #core-search {
+      width: 100%;
+      background: #0d0d1a;
+      border: 1px solid #0f3460;
+      border-radius: 4px;
+      color: #e0e0e0;
+      padding: 8px 10px;
+      font-family: inherit;
+      font-size: 0.85rem;
+      outline: none;
+    }
+    #core-search:focus { border-color: #e94560; }
+    #core-list {
+      flex: 1;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      max-height: 50vh;
+      scrollbar-width: thin;
+      scrollbar-color: #333 transparent;
+    }
+    .core-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 10px;
+      background: #0d0d1a;
+      border-radius: 4px;
+      font-size: 0.8rem;
+    }
+    .core-row .core-name { flex: 1; color: #e0e0e0; }
+    .core-row .core-status {
+      font-size: 0.7rem;
+      color: #555;
+    }
+    .core-row .core-status.installed { color: #00ff88; }
+    .core-row .core-status.update { color: #ffa500; }
+    .core-row button {
+      background: #16213e;
+      border: 1px solid #0f3460;
+      border-radius: 4px;
+      color: #aaa;
+      padding: 4px 10px;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 0.75rem;
+    }
+    .core-row button:hover { border-color: #e94560; color: #e94560; }
+    .core-row button.downloading {
+      border-color: #ffa500;
+      color: #ffa500;
+      cursor: wait;
+    }
+    .core-row button.delete-btn:hover { border-color: #ff4444; color: #ff4444; }
+    #core-modal-status {
+      font-size: 0.75rem;
+      color: #555;
+      min-height: 1.2em;
+    }
+    .core-close-btn {
+      background: none;
+      border: 1px solid #333;
+      border-radius: 4px;
+      color: #888;
+      padding: 6px 14px;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 0.8rem;
+      align-self: flex-end;
+    }
+    .core-close-btn:hover { border-color: #e94560; color: #e94560; }
+
+    /* ── Key bindings modal ── */
+    #keybind-modal {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.85);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+    }
+    #keybind-modal.hidden { display: none; }
+    .keybind-modal-box {
+      background: #1a1a2e;
+      border: 1px solid #0f3460;
+      border-radius: 8px;
+      padding: 24px;
+      width: 420px;
+      max-height: 80vh;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .keybind-modal-box h2 {
+      color: #e94560;
+      font-size: 1.1rem;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+    }
+    .keybind-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 6px 0;
+    }
+    .keybind-label {
+      width: 80px;
+      font-size: 0.85rem;
+      color: #aaa;
+      text-align: right;
+    }
+    .keybind-btn {
+      flex: 1;
+      background: #0d0d1a;
+      border: 1px solid #0f3460;
+      border-radius: 4px;
+      color: #e0e0e0;
+      padding: 8px 12px;
+      font-family: inherit;
+      font-size: 0.85rem;
+      cursor: pointer;
+      text-align: center;
+    }
+    .keybind-btn:hover { border-color: #e94560; }
+    .keybind-btn.listening {
+      border-color: #ffa500;
+      color: #ffa500;
+      animation: pulse 1s infinite;
+    }
+    @keyframes pulse { 0%,100% { opacity:1 } 50% { opacity:0.5 } }
+    .keybind-actions {
+      display: flex;
+      gap: 8px;
+      justify-content: flex-end;
+      margin-top: 4px;
+    }
+    .keybind-actions button {
+      background: none;
+      border: 1px solid #333;
+      border-radius: 4px;
+      color: #888;
+      padding: 6px 14px;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 0.8rem;
+    }
+    .keybind-actions button:hover { border-color: #e94560; color: #e94560; }
+    .keybind-actions button.primary {
+      background: #e94560;
+      border-color: #e94560;
+      color: #fff;
+    }
+    .keybind-actions button.primary:hover { background: #ff2d55; }
+
+    /* ── Reset button (top right of game area) ── */
+    #reset-btn {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      background: rgba(26,26,46,0.85);
+      border: 1px solid #0f3460;
+      border-radius: 4px;
+      color: #aaa;
+      padding: 6px 14px;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 0.75rem;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      z-index: 10;
+      display: none;
+    }
+    #reset-btn:hover { border-color: #e94560; color: #e94560; }
+    #reset-btn.visible { display: block; }
+
+    /* ── Player selector ── */
+    #player-selector {
+      display: flex;
+      gap: 4px;
+      margin-top: 6px;
+    }
+    .player-slot-btn {
+      background: #1a1a1a;
+      border: 1px solid #333;
+      border-radius: 4px;
+      color: #666;
+      padding: 4px 10px;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 0.75rem;
+    }
+    .player-slot-btn:hover { border-color: #e94560; color: #e94560; }
+    .player-slot-btn.active { border-color: #00ff88; color: #00ff88; }
+    .player-slot-btn.taken { border-color: #555; color: #444; cursor: not-allowed; }
+
+    /* ── Audio indicator ── */
+    #audio-status {
+      font-size: 0.7rem;
+      color: #555;
+      margin-top: 4px;
+    }
+    #audio-status.playing { color: #00ff88; }
+    #audio-status.muted { color: #e94560; }
+    #unmute-btn {
+      background: #e94560;
+      border: none;
+      border-radius: 4px;
+      color: #fff;
+      padding: 4px 10px;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 0.75rem;
+      margin-left: 6px;
+      display: none;
+    }
+    #unmute-btn:hover { background: #ff2d55; }
+
     /* ── Controls hint ── */
     #controls-hint {
       padding: 6px 12px;
@@ -292,7 +603,9 @@
       display: flex;
       gap: 16px;
       flex-wrap: wrap;
+      cursor: pointer;
     }
+    #controls-hint:hover { color: #666; }
     #controls-hint span { color: #666; }
     #controls-hint kbd {
       background: #222;
@@ -321,21 +634,55 @@
     }
     .voice-btn.active { border-color: #00ff88; color: #00ff88; }
     .voice-btn.muted  { border-color: #e94560; color: #e94560; }
+
+    /* ── Gamepad indicator ── */
+    #gamepad-indicator {
+      font-size: 0.7rem;
+      color: #555;
+      padding: 2px 0;
+    }
+    #gamepad-indicator.connected { color: #00ff88; }
   </style>
 </head>
 <body>
+
+<!-- Core manager modal -->
+<div id="core-modal" class="hidden">
+  <div class="core-modal-box">
+    <h2>Core Manager</h2>
+    <div class="core-tabs">
+      <button class="core-tab active" data-tab="available">Available</button>
+      <button class="core-tab" data-tab="installed">Installed</button>
+      <button class="core-tab" data-tab="updates">Updates</button>
+    </div>
+    <input id="core-search" type="text" placeholder="Search cores..." />
+    <div id="core-list"></div>
+    <div id="core-modal-status"></div>
+    <button class="core-close-btn" id="core-close-btn">Close</button>
+  </div>
+</div>
+
+<!-- Key bindings modal -->
+<div id="keybind-modal" class="hidden">
+  <div class="keybind-modal-box">
+    <h2>Key Bindings</h2>
+    <div id="keybind-list"></div>
+    <div class="keybind-actions">
+      <button id="keybind-reset">Reset Defaults</button>
+      <button id="keybind-close" class="primary">Done</button>
+    </div>
+  </div>
+</div>
 
 <!-- Join modal -->
 <div id="join-modal">
   <div class="modal-box">
     <h2>RetroStream</h2>
-    <div>
-      <label>Server URL</label>
-      <input id="server-url" type="text" value="http://localhost:8000" />
-    </div>
-    <div>
-      <label>Session ID</label>
-      <input id="session-id-input" type="text" placeholder="Leave blank to create new" />
+    <div class="session-list-section">
+      <h3>Active Sessions</h3>
+      <div id="active-sessions-list">
+        <div style="color:#555;font-size:0.8rem;padding:6px;">Loading...</div>
+      </div>
     </div>
     <div>
       <label>Username</label>
@@ -348,15 +695,22 @@
         <option value="spectator">Spectator</option>
       </select>
     </div>
-    <div>
-      <label>Core Path (for new sessions)</label>
-      <input id="core-path" type="text" placeholder="cores/snes9x_libretro.so" />
+    <div style="border-top:1px solid #0f3460;padding-top:12px;margin-top:4px;">
+      <label style="color:#e94560;">Create New Session</label>
     </div>
     <div>
-      <label>ROM Path (for new sessions)</label>
-      <input id="rom-path" type="text" placeholder="roms/game.sfc" />
+      <label>ROM</label>
+      <select id="rom-path">
+        <option value="">Loading ROMs...</option>
+      </select>
     </div>
-    <button id="join-btn">Connect</button>
+    <div>
+      <label>Core</label>
+      <select id="core-path">
+        <option value="">Loading cores...</option>
+      </select>
+    </div>
+    <button id="join-btn">Create & Connect</button>
   </div>
 </div>
 
@@ -364,12 +718,15 @@
 <header>
   <h1>RetroStream</h1>
   <div id="session-badge">No session</div>
+  <button class="header-btn" id="cores-btn">Cores</button>
+  <button class="header-btn" id="keybind-btn">Controls</button>
   <div id="connection-status" class="disconnected">Disconnected</div>
 </header>
 
 <!-- Main content -->
 <main>
   <div id="game-area">
+    <button id="reset-btn">Reset</button>
     <video id="game-video" autoplay playsinline muted style="display:none;"></video>
     <canvas id="game-canvas" width="256" height="224"></canvas>
     <div id="overlay-message">
@@ -384,6 +741,7 @@
       <div id="player-list">
         <div class="player-row"><div class="player-dot"></div><span>Waiting...</span></div>
       </div>
+      <div id="player-selector"></div>
     </div>
 
     <!-- Memory watch -->
@@ -394,13 +752,21 @@
       </div>
     </div>
 
-    <!-- Voice -->
+    <!-- Voice / Audio -->
     <div class="panel-section">
-      <h3>Voice Chat</h3>
+      <h3>Audio</h3>
       <div id="voice-controls">
-        <button class="voice-btn" id="mic-btn">🎤 Mic Off</button>
-        <button class="voice-btn" id="deafen-btn">🔊 On</button>
+        <button class="voice-btn" id="mic-btn">Mic Off</button>
+        <button class="voice-btn" id="deafen-btn">Audio On</button>
       </div>
+      <div id="audio-status">No game audio</div>
+      <button id="unmute-btn">Enable Audio</button>
+    </div>
+
+    <!-- Gamepad -->
+    <div class="panel-section">
+      <h3>Gamepad</h3>
+      <div id="gamepad-indicator">No gamepad detected</div>
     </div>
 
     <!-- Chat -->
@@ -409,19 +775,14 @@
       <div id="chat-messages"></div>
       <div id="chat-input-row">
         <input id="chat-input" type="text" placeholder="Say something..." maxlength="200" />
-        <button id="chat-send">→</button>
+        <button id="chat-send">&rarr;</button>
       </div>
     </div>
   </div>
 </main>
 
-<!-- Controls hint -->
-<div id="controls-hint">
-  <span>D-Pad: <kbd>↑</kbd><kbd>↓</kbd><kbd>←</kbd><kbd>→</kbd></span>
-  <span>A: <kbd>Z</kbd>  B: <kbd>X</kbd>  X: <kbd>A</kbd>  Y: <kbd>S</kbd></span>
-  <span>L: <kbd>Q</kbd>  R: <kbd>W</kbd></span>
-  <span>Start: <kbd>Enter</kbd>  Select: <kbd>Shift</kbd></span>
-</div>
+<!-- Controls hint (click to open keybind modal) -->
+<div id="controls-hint"></div>
 
 <script>
 // ============================================================
@@ -434,19 +795,74 @@ const BUTTON = {
   A:      8,  X:      9,  L:      10, R:      11,
 };
 
-// Keyboard → button mapping
-const KEY_MAP = {
-  ArrowUp:    BUTTON.UP,    ArrowDown:  BUTTON.DOWN,
-  ArrowLeft:  BUTTON.LEFT,  ArrowRight: BUTTON.RIGHT,
-  KeyZ:       BUTTON.A,     KeyX:       BUTTON.B,
-  KeyA:       BUTTON.X,     KeyS:       BUTTON.Y,
-  KeyQ:       BUTTON.L,     KeyW:       BUTTON.R,
-  Enter:      BUTTON.START, ShiftLeft:  BUTTON.SELECT,
+const BUTTON_NAMES = {
+  UP: "Up", DOWN: "Down", LEFT: "Left", RIGHT: "Right",
+  A: "A", B: "B", X: "X", Y: "Y",
+  L: "L", R: "R", START: "Start", SELECT: "Select",
 };
+
+// Display-friendly names for key codes
+function keyCodeToLabel(code) {
+  if (!code) return "—";
+  const map = {
+    ArrowUp: "\u2191", ArrowDown: "\u2193", ArrowLeft: "\u2190", ArrowRight: "\u2192",
+    ShiftLeft: "L-Shift", ShiftRight: "R-Shift", Enter: "Enter",
+    Space: "Space", Backspace: "Backspace", Tab: "Tab",
+    ControlLeft: "L-Ctrl", ControlRight: "R-Ctrl",
+    AltLeft: "L-Alt", AltRight: "R-Alt",
+  };
+  if (map[code]) return map[code];
+  if (code.startsWith("Key")) return code.slice(3);
+  if (code.startsWith("Digit")) return code.slice(5);
+  if (code.startsWith("Numpad")) return "Num" + code.slice(6);
+  return code;
+}
+
+// Default key bindings: { buttonName: keyCode }
+const DEFAULT_KEY_BINDINGS = {
+  UP:     "ArrowUp",
+  DOWN:   "ArrowDown",
+  LEFT:   "ArrowLeft",
+  RIGHT:  "ArrowRight",
+  A:      "KeyZ",
+  B:      "KeyX",
+  X:      "KeyA",
+  Y:      "KeyS",
+  L:      "KeyQ",
+  R:      "KeyW",
+  START:  "Enter",
+  SELECT: "ShiftLeft",
+};
+
+// Load saved bindings or use defaults
+function loadKeyBindings() {
+  try {
+    const saved = localStorage.getItem("retrostream_keybinds");
+    if (saved) return JSON.parse(saved);
+  } catch (e) {}
+  return { ...DEFAULT_KEY_BINDINGS };
+}
+
+function saveKeyBindings(bindings) {
+  localStorage.setItem("retrostream_keybinds", JSON.stringify(bindings));
+}
+
+let keyBindings = loadKeyBindings();
+
+// Build reverse map: keyCode → BUTTON id
+function buildKeyMap() {
+  const map = {};
+  for (const [btnName, keyCode] of Object.entries(keyBindings)) {
+    map[keyCode] = BUTTON[btnName];
+  }
+  return map;
+}
+
+let KEY_MAP = buildKeyMap();
 
 // ── State ──
 let state = {
-  serverUrl:   "http://localhost:8000",
+  serverUrl:   window.location.origin,
   sessionId:   null,
   clientId:    null,
   playerNum:   null,
@@ -455,16 +871,19 @@ let state = {
   buttons:     0,
   connected:   false,
 
-  pc:          null,   // RTCPeerConnection
-  inputWs:     null,   // WebSocket (input)
-  memoryWs:    null,   // WebSocket (memory)
-  chatWs:      null,   // WebSocket (chat)
+  pc:          null,
+  inputWs:     null,
+  memoryWs:    null,
+  chatWs:      null,
 
   micStream:   null,
   micEnabled:  false,
   deafened:    false,
 
-  memValues:   {},     // last known memory values
+  memValues:   {},
+
+  gamepadButtons: 0, // separate from keyboard
+  gameAudio:   null, // Audio element for game audio
 };
 
 // ── DOM refs ──
@@ -478,91 +897,182 @@ const sessionBadge = $("session-badge");
 const chatMessages = $("chat-messages");
 
 // ============================================================
+// Session persistence (localStorage)
+// ============================================================
+
+function saveSessionState() {
+  const data = {
+    serverUrl:  state.serverUrl,
+    sessionId:  state.sessionId,
+    clientId:   state.clientId,
+    username:   state.username,
+    role:       state.role,
+  };
+  localStorage.setItem("retrostream_session", JSON.stringify(data));
+}
+
+function loadSessionState() {
+  try {
+    const saved = localStorage.getItem("retrostream_session");
+    if (saved) return JSON.parse(saved);
+  } catch (e) {}
+  return null;
+}
+
+function clearSessionState() {
+  localStorage.removeItem("retrostream_session");
+}
+
+// ============================================================
 // Join / Connect
 // ============================================================
 
-$("join-btn").addEventListener("click", async () => {
-  state.serverUrl = $("server-url").value.replace(/\/$/, "");
+async function joinSession(sessionId) {
+  state.serverUrl = window.location.origin;
   state.username  = $("username-input").value || "Player" + Math.floor(Math.random()*100);
   state.role      = $("role-select").value;
-  let sessionId   = $("session-id-input").value.trim();
 
   setStatus("connecting");
 
   try {
-    if (!sessionId) {
-      // Create a new session
-      const core = $("core-path").value.trim();
-      const rom  = $("rom-path").value.trim();
-      if (!core || !rom) {
-        alert("Enter a core path and ROM path to create a new session.");
-        setStatus("disconnected"); return;
-      }
-      const res = await fetch(`${state.serverUrl}/api/sessions`, {
-        method: "POST",
-        headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({ core_path: core, rom_path: rom }),
-      });
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.detail || "Failed to create session");
-      }
-      const data = await res.json();
-      sessionId = data.session_id;
-    }
-
     state.sessionId = sessionId;
     sessionBadge.textContent = `Session: ${sessionId}`;
-
     $("join-modal").classList.add("hidden");
 
     await connectWebRTC();
     connectInputWS();
     connectMemoryWS();
     connectChatWS();
+    saveSessionState();
 
   } catch (err) {
     alert("Connection failed: " + err.message);
     setStatus("disconnected");
     $("join-modal").classList.remove("hidden");
+    clearSessionState();
+  }
+}
+
+$("join-btn").addEventListener("click", async () => {
+  state.serverUrl = window.location.origin;
+  state.username  = $("username-input").value || "Player" + Math.floor(Math.random()*100);
+  state.role      = $("role-select").value;
+
+  setStatus("connecting");
+
+  try {
+    const core = $("core-path").value;
+    const rom  = $("rom-path").value;
+    if (!core || !rom) {
+      alert("Select a ROM and core to create a new session.");
+      setStatus("disconnected"); return;
+    }
+    const res = await fetch(`${state.serverUrl}/api/sessions`, {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({ core_path: core, rom_path: rom }),
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.detail || "Failed to create session");
+    }
+    const data = await res.json();
+    state.sessionId = data.session_id;
+    sessionBadge.textContent = `Session: ${state.sessionId}`;
+    $("join-modal").classList.add("hidden");
+
+    await connectWebRTC();
+    connectInputWS();
+    connectMemoryWS();
+    connectChatWS();
+    saveSessionState();
+
+  } catch (err) {
+    alert("Connection failed: " + err.message);
+    setStatus("disconnected");
+    $("join-modal").classList.remove("hidden");
+    clearSessionState();
   }
 });
+
+// ============================================================
+// Active sessions list
+// ============================================================
+
+async function loadActiveSessions() {
+  const list = $("active-sessions-list");
+  try {
+    const base = window.location.origin;
+    const res = await fetch(`${base}/api/sessions`);
+    const sessions = await res.json();
+
+    if (sessions.length === 0) {
+      list.innerHTML = '<div style="color:#555;font-size:0.8rem;padding:6px;">No active sessions</div>';
+      return;
+    }
+
+    list.innerHTML = "";
+    for (const s of sessions) {
+      const row = document.createElement("div");
+      row.className = "session-row";
+      row.innerHTML = `
+        <div class="session-info">
+          <span class="session-id-label">${escHtml(s.session_id)}</span>
+          <span class="session-meta">${escHtml(s.rom)} &middot; ${s.players}/${s.max_players} players</span>
+        </div>
+      `;
+      row.addEventListener("click", () => joinSession(s.session_id));
+      list.appendChild(row);
+    }
+  } catch (e) {
+    list.innerHTML = '<div style="color:#555;font-size:0.8rem;padding:6px;">Could not load sessions</div>';
+  }
+}
 
 // ============================================================
 // WebRTC
 // ============================================================
 
 async function connectWebRTC() {
-  const wsBase = state.serverUrl.replace(/^http/, "ws");
-
   state.pc = new RTCPeerConnection({
     iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
   });
 
-  // Video track → canvas
+  // Video/Audio tracks
   state.pc.ontrack = (e) => {
     if (e.track.kind === "video") {
       video.srcObject = e.streams[0];
       video.play().catch(() => {});
       overlay.style.display = "none";
+      $("reset-btn").classList.add("visible");
       renderVideoToCanvas();
     }
-    if (e.track.kind === "audio" && !state.deafened) {
-      const audio = new Audio();
-      audio.srcObject = e.streams[0];
-      audio.play().catch(() => {});
+    if (e.track.kind === "audio") {
+      state.gameAudio = new Audio();
+      state.gameAudio.srcObject = e.streams[0];
+      state.gameAudio.volume = 1.0;
+      // Try to play — may fail due to autoplay policy
+      state.gameAudio.play().then(() => {
+        updateAudioStatus("playing");
+      }).catch((err) => {
+        console.warn("Audio autoplay blocked:", err.message);
+        updateAudioStatus("blocked");
+      });
     }
   };
 
   state.pc.onconnectionstatechange = () => {
     const s = state.pc.connectionState;
-    if (s === "connected")     { setStatus("connected"); state.connected = true; }
+    if (s === "connected") {
+      setStatus("connected");
+      state.connected = true;
+      renderPlayerSelector();
+    }
     if (s === "disconnected" ||
         s === "failed" ||
         s === "closed")        { setStatus("disconnected"); state.connected = false; }
   };
 
-  // Add transceiver for receiving video
   state.pc.addTransceiver("video", { direction: "recvonly" });
   state.pc.addTransceiver("audio", { direction: "sendrecv" });
 
@@ -575,7 +1085,7 @@ async function connectWebRTC() {
     state.pc.onicegatheringstatechange = () => {
       if (state.pc.iceGatheringState === "complete") resolve();
     };
-    setTimeout(resolve, 3000); // fallback timeout
+    setTimeout(resolve, 3000);
   });
 
   const res = await fetch(
@@ -599,10 +1109,10 @@ async function connectWebRTC() {
     new RTCSessionDescription({ sdp: answer.sdp, type: answer.type })
   );
 
+  saveSessionState();
   updatePlayerList();
 }
 
-// Draw video track to canvas (preserves pixel-perfect scaling)
 function renderVideoToCanvas() {
   if (video.paused || video.ended) return;
   if (video.videoWidth) {
@@ -636,13 +1146,19 @@ function sendInput() {
   }
 }
 
+// ============================================================
 // Keyboard input
+// ============================================================
+
 const pressedKeys = new Set();
 
 document.addEventListener("keydown", (e) => {
-  if (e.target === $("chat-input") || e.target === $("server-url")) return;
+  // Don't capture input when typing in text fields
+  if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
+
   const btn = KEY_MAP[e.code];
   if (btn !== undefined && !pressedKeys.has(e.code)) {
+    e.preventDefault();
     pressedKeys.add(e.code);
     state.buttons |= (1 << btn);
     sendInput();
@@ -658,41 +1174,76 @@ document.addEventListener("keyup", (e) => {
   }
 });
 
-// Gamepad polling
-let gamepadRaf = null;
+// ============================================================
+// Gamepad support
+// ============================================================
+
+const GAMEPAD_MAP = [
+  [0,  BUTTON.A],   [1, BUTTON.B],
+  [2,  BUTTON.X],   [3, BUTTON.Y],
+  [4,  BUTTON.L],   [5, BUTTON.R],
+  [8,  BUTTON.SELECT], [9, BUTTON.START],
+  [12, BUTTON.UP],  [13, BUTTON.DOWN],
+  [14, BUTTON.LEFT],[15, BUTTON.RIGHT],
+];
+
+let gamepadConnected = false;
+
 function pollGamepad() {
   const pads = navigator.getGamepads ? navigator.getGamepads() : [];
+  let foundPad = false;
+
   for (const pad of pads) {
     if (!pad) continue;
-    let buttons = 0;
-    // Standard mapping (most USB/Bluetooth gamepads)
-    const map = [
-      [0,  BUTTON.A],   [1, BUTTON.B],
-      [2,  BUTTON.X],   [3, BUTTON.Y],
-      [4,  BUTTON.L],   [5, BUTTON.R],
-      [8,  BUTTON.SELECT], [9, BUTTON.START],
-      [12, BUTTON.UP],  [13, BUTTON.DOWN],
-      [14, BUTTON.LEFT],[15, BUTTON.RIGHT],
-    ];
-    for (const [gpIdx, retroBtn] of map) {
-      if (pad.buttons[gpIdx]?.pressed) buttons |= (1 << retroBtn);
-    }
-    // Analog stick → D-pad
-    if (pad.axes[0] < -0.5) buttons |= (1 << BUTTON.LEFT);
-    if (pad.axes[0] >  0.5) buttons |= (1 << BUTTON.RIGHT);
-    if (pad.axes[1] < -0.5) buttons |= (1 << BUTTON.UP);
-    if (pad.axes[1] >  0.5) buttons |= (1 << BUTTON.DOWN);
+    foundPad = true;
+    let gpButtons = 0;
 
-    if (buttons !== state.buttons) {
-      state.buttons = buttons;
+    for (const [gpIdx, retroBtn] of GAMEPAD_MAP) {
+      if (pad.buttons[gpIdx]?.pressed) gpButtons |= (1 << retroBtn);
+    }
+
+    // Analog stick -> D-pad (both sticks)
+    if (pad.axes[0] < -0.5) gpButtons |= (1 << BUTTON.LEFT);
+    if (pad.axes[0] >  0.5) gpButtons |= (1 << BUTTON.RIGHT);
+    if (pad.axes[1] < -0.5) gpButtons |= (1 << BUTTON.UP);
+    if (pad.axes[1] >  0.5) gpButtons |= (1 << BUTTON.DOWN);
+    // Right stick (axes 2,3) as well
+    if (pad.axes.length >= 4) {
+      if (pad.axes[2] < -0.5) gpButtons |= (1 << BUTTON.LEFT);
+      if (pad.axes[2] >  0.5) gpButtons |= (1 << BUTTON.RIGHT);
+      if (pad.axes[3] < -0.5) gpButtons |= (1 << BUTTON.UP);
+      if (pad.axes[3] >  0.5) gpButtons |= (1 << BUTTON.DOWN);
+    }
+
+    if (gpButtons !== state.gamepadButtons) {
+      state.gamepadButtons = gpButtons;
+      // Merge keyboard + gamepad
+      const kbButtons = state.buttons & ~state.gamepadButtons; // keep only pure keyboard bits
+      state.buttons = kbButtons | gpButtons;
       sendInput();
     }
-    break; // use first gamepad only for P1
+    break; // use first gamepad only
   }
-  gamepadRaf = requestAnimationFrame(pollGamepad);
+
+  // Update indicator
+  if (foundPad !== gamepadConnected) {
+    gamepadConnected = foundPad;
+    const el = $("gamepad-indicator");
+    if (foundPad) {
+      const pad = Array.from(pads).find(p => p);
+      el.textContent = pad.id.substring(0, 40);
+      el.className = "connected";
+    } else {
+      el.textContent = "No gamepad detected";
+      el.className = "";
+    }
+  }
+
+  requestAnimationFrame(pollGamepad);
 }
-window.addEventListener("gamepadconnected",    () => pollGamepad());
-window.addEventListener("gamepaddisconnected", () => cancelAnimationFrame(gamepadRaf));
+
+// Always poll for gamepads (they can connect/disconnect anytime)
+requestAnimationFrame(pollGamepad);
 
 // ============================================================
 // Memory WebSocket
@@ -793,7 +1344,7 @@ $("mic-btn").addEventListener("click", async () => {
         if (state.pc) state.pc.addTrack(track, state.micStream);
       });
       state.micEnabled = true;
-      $("mic-btn").textContent = "🎤 Mic On";
+      $("mic-btn").textContent = "Mic On";
       $("mic-btn").classList.add("active");
     } catch (err) {
       alert("Mic access denied: " + err.message);
@@ -801,7 +1352,7 @@ $("mic-btn").addEventListener("click", async () => {
   } else {
     state.micStream?.getTracks().forEach(t => t.stop());
     state.micEnabled = false;
-    $("mic-btn").textContent = "🎤 Mic Off";
+    $("mic-btn").textContent = "Mic Off";
     $("mic-btn").classList.remove("active");
     $("mic-btn").classList.add("muted");
   }
@@ -809,9 +1360,109 @@ $("mic-btn").addEventListener("click", async () => {
 
 $("deafen-btn").addEventListener("click", () => {
   state.deafened = !state.deafened;
-  $("deafen-btn").textContent = state.deafened ? "🔇 Deafened" : "🔊 On";
+  $("deafen-btn").textContent = state.deafened ? "Audio Off" : "Audio On";
   $("deafen-btn").classList.toggle("muted", state.deafened);
+  if (state.gameAudio) {
+    state.gameAudio.muted = state.deafened;
+    updateAudioStatus(state.deafened ? "muted" : "playing");
+  }
 });
+
+// ============================================================
+// Key bindings UI
+// ============================================================
+
+let listeningFor = null; // button name currently being rebound
+
+function renderKeybindList() {
+  const list = $("keybind-list");
+  list.innerHTML = "";
+  const order = ["UP","DOWN","LEFT","RIGHT","A","B","X","Y","L","R","START","SELECT"];
+  for (const btnName of order) {
+    const row = document.createElement("div");
+    row.className = "keybind-row";
+    const isListening = listeningFor === btnName;
+    row.innerHTML = `
+      <span class="keybind-label">${BUTTON_NAMES[btnName]}</span>
+      <button class="keybind-btn ${isListening ? 'listening' : ''}"
+              data-btn="${btnName}">
+        ${isListening ? 'Press a key...' : keyCodeToLabel(keyBindings[btnName])}
+      </button>
+    `;
+    row.querySelector(".keybind-btn").addEventListener("click", () => {
+      listeningFor = btnName;
+      renderKeybindList();
+    });
+    list.appendChild(row);
+  }
+}
+
+function handleKeybindCapture(e) {
+  if (!listeningFor) return;
+  e.preventDefault();
+  e.stopPropagation();
+
+  // Ignore modifier-only presses
+  if (["Control","Alt","Meta"].includes(e.key)) return;
+
+  keyBindings[listeningFor] = e.code;
+  listeningFor = null;
+  saveKeyBindings(keyBindings);
+  KEY_MAP = buildKeyMap();
+  renderKeybindList();
+  updateControlsHint();
+}
+
+$("keybind-btn").addEventListener("click", () => {
+  listeningFor = null;
+  $("keybind-modal").classList.remove("hidden");
+  renderKeybindList();
+});
+
+$("keybind-close").addEventListener("click", () => {
+  listeningFor = null;
+  $("keybind-modal").classList.add("hidden");
+});
+
+$("keybind-reset").addEventListener("click", () => {
+  keyBindings = { ...DEFAULT_KEY_BINDINGS };
+  saveKeyBindings(keyBindings);
+  KEY_MAP = buildKeyMap();
+  listeningFor = null;
+  renderKeybindList();
+  updateControlsHint();
+});
+
+document.addEventListener("keydown", (e) => {
+  if (listeningFor) {
+    handleKeybindCapture(e);
+  }
+}, true); // capture phase so it fires before the game input handler
+
+// Click on controls hint also opens keybind modal
+$("controls-hint").addEventListener("click", () => {
+  listeningFor = null;
+  $("keybind-modal").classList.remove("hidden");
+  renderKeybindList();
+});
+
+// ============================================================
+// Controls hint bar
+// ============================================================
+
+function updateControlsHint() {
+  const hint = $("controls-hint");
+  const b = keyBindings;
+  hint.innerHTML = `
+    <span>D-Pad: <kbd>${keyCodeToLabel(b.UP)}</kbd><kbd>${keyCodeToLabel(b.DOWN)}</kbd><kbd>${keyCodeToLabel(b.LEFT)}</kbd><kbd>${keyCodeToLabel(b.RIGHT)}</kbd></span>
+    <span>A: <kbd>${keyCodeToLabel(b.A)}</kbd>  B: <kbd>${keyCodeToLabel(b.B)}</kbd>  X: <kbd>${keyCodeToLabel(b.X)}</kbd>  Y: <kbd>${keyCodeToLabel(b.Y)}</kbd></span>
+    <span>L: <kbd>${keyCodeToLabel(b.L)}</kbd>  R: <kbd>${keyCodeToLabel(b.R)}</kbd></span>
+    <span>Start: <kbd>${keyCodeToLabel(b.START)}</kbd>  Select: <kbd>${keyCodeToLabel(b.SELECT)}</kbd></span>
+    <span style="margin-left:auto;color:#444;">Click to customize</span>
+  `;
+}
+
+updateControlsHint();
 
 // ============================================================
 // Helpers
@@ -827,10 +1478,9 @@ function updatePlayerList() {
   list.innerHTML = "";
   const row = document.createElement("div");
   row.className = "player-row";
-  const isYou = true;
   row.innerHTML = `
-    <div class="player-dot ${isYou ? "you" : "active"}"></div>
-    <span>${state.username} (P${(state.playerNum ?? 0) + 1})</span>
+    <div class="player-dot you"></div>
+    <span>${escHtml(state.username)} (P${(state.playerNum ?? 0) + 1})</span>
     <span style="margin-left:auto;color:#555;font-size:0.7rem">${state.role}</span>
   `;
   list.appendChild(row);
@@ -842,6 +1492,446 @@ function escHtml(s) {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;");
 }
+
+// ============================================================
+// ROM / Core dropdown population
+// ============================================================
+
+const EXT_TO_CORES = {
+  ".sfc":  ["snes9x", "bsnes"],
+  ".smc":  ["snes9x", "bsnes"],
+  ".nes":  ["fceumm", "nestopia"],
+  ".gb":   ["gambatte", "mgba", "sameboy"],
+  ".gbc":  ["gambatte", "mgba", "sameboy"],
+  ".gba":  ["mgba", "vba_next", "gpsp"],
+  ".n64":  ["mupen64plus_next", "mupen64plus", "parallel_n64"],
+  ".z64":  ["mupen64plus_next", "mupen64plus", "parallel_n64"],
+  ".v64":  ["mupen64plus_next", "mupen64plus", "parallel_n64"],
+  ".gen":  ["genesis_plus_gx", "picodrive", "blastem"],
+  ".md":   ["genesis_plus_gx", "picodrive", "blastem"],
+  ".smd":  ["genesis_plus_gx", "picodrive", "blastem"],
+  ".sms":  ["genesis_plus_gx", "picodrive"],
+  ".gg":   ["genesis_plus_gx", "gearsystem"],
+  ".pce":  ["mednafen_pce", "beetle_pce"],
+  ".a26":  ["stella"],
+  ".a78":  ["prosystem"],
+  ".lnx":  ["handy", "mednafen_lynx"],
+  ".ngp":  ["mednafen_ngp", "beetle_ngp"],
+  ".ngc":  ["mednafen_ngp", "beetle_ngp"],
+  ".ws":   ["mednafen_wswan", "beetle_wswan"],
+  ".wsc":  ["mednafen_wswan", "beetle_wswan"],
+  ".nds":  ["desmume", "melonds"],
+  ".3ds":  ["citra"],
+  ".iso":  ["mednafen_psx", "beetle_psx", "pcsx_rearmed", "dolphin"],
+  ".bin":  ["mednafen_psx", "beetle_psx", "pcsx_rearmed", "genesis_plus_gx"],
+  ".cue":  ["mednafen_psx", "beetle_psx", "pcsx_rearmed"],
+  ".chd":  ["mednafen_psx", "beetle_psx", "pcsx_rearmed"],
+  ".pbp":  ["ppsspp"],
+  ".cso":  ["ppsspp"],
+  ".vb":   ["mednafen_vb", "beetle_vb"],
+};
+
+let _loadedRoms = [];
+let _loadedCores = [];
+
+async function populateDropdowns() {
+  const base = window.location.origin;
+  try {
+    const [roms, cores] = await Promise.all([
+      fetch(`${base}/api/roms`).then(r => r.json()),
+      fetch(`${base}/api/cores/installed`).then(r => r.json()),
+    ]);
+    _loadedRoms = roms;
+    _loadedCores = cores;
+
+    const romSel = $("rom-path");
+    romSel.innerHTML = "";
+    if (roms.length === 0) {
+      romSel.innerHTML = '<option value="">No ROMs found in roms/</option>';
+    } else {
+      romSel.innerHTML = '<option value="">-- Select a ROM --</option>';
+      for (const r of roms) {
+        const opt = document.createElement("option");
+        opt.value = r.path;
+        opt.textContent = r.filename;
+        romSel.appendChild(opt);
+      }
+    }
+
+    populateCoreDropdown(cores);
+  } catch (e) {
+    console.error("Failed to populate dropdowns:", e);
+    $("rom-path").innerHTML = '<option value="">Failed to load ROMs</option>';
+    $("core-path").innerHTML = '<option value="">Failed to load cores</option>';
+  }
+}
+
+function populateCoreDropdown(cores) {
+  const coreSel = $("core-path");
+  coreSel.innerHTML = "";
+  if (cores.length === 0) {
+    coreSel.innerHTML = '<option value="">No cores installed (use Cores button)</option>';
+  } else {
+    coreSel.innerHTML = '<option value="">-- Select a core --</option>';
+    for (const c of cores) {
+      const opt = document.createElement("option");
+      opt.value = c.path;
+      opt.textContent = `${c.name} (${c.filename})`;
+      coreSel.appendChild(opt);
+    }
+  }
+}
+
+function autoSelectCore() {
+  const romPath = $("rom-path").value;
+  if (!romPath || _loadedCores.length === 0) return;
+
+  const ext = "." + romPath.split(".").pop().toLowerCase();
+  const candidates = EXT_TO_CORES[ext];
+  if (!candidates) return;
+
+  for (const candidate of candidates) {
+    const match = _loadedCores.find(c =>
+      c.name.toLowerCase().includes(candidate.toLowerCase())
+    );
+    if (match) {
+      $("core-path").value = match.path;
+      return;
+    }
+  }
+}
+
+$("rom-path").addEventListener("change", autoSelectCore);
+
+// ============================================================
+// Core Manager
+// ============================================================
+
+const coreState = {
+  tab: "available",
+  remoteCores: [],
+  installedCores: [],
+  updates: [],
+};
+
+function getCoreServerUrl() {
+  return window.location.origin;
+}
+
+$("cores-btn").addEventListener("click", () => {
+  $("core-modal").classList.remove("hidden");
+  switchCoreTab("available");
+});
+
+$("core-close-btn").addEventListener("click", () => {
+  $("core-modal").classList.add("hidden");
+});
+
+document.querySelectorAll(".core-tab").forEach(btn => {
+  btn.addEventListener("click", () => switchCoreTab(btn.dataset.tab));
+});
+
+function switchCoreTab(tab) {
+  coreState.tab = tab;
+  document.querySelectorAll(".core-tab").forEach(b => {
+    b.classList.toggle("active", b.dataset.tab === tab);
+  });
+  $("core-search").value = "";
+  loadCoreTab();
+}
+
+async function loadCoreTab() {
+  const list = $("core-list");
+  const status = $("core-modal-status");
+  list.innerHTML = '<div style="color:#555;padding:12px;">Loading...</div>';
+  status.textContent = "";
+
+  const base = getCoreServerUrl();
+
+  try {
+    if (coreState.tab === "available") {
+      const [remoteRes, installedRes] = await Promise.all([
+        fetch(`${base}/api/cores/remote`),
+        fetch(`${base}/api/cores/installed`),
+      ]);
+      coreState.remoteCores = await remoteRes.json();
+      coreState.installedCores = await installedRes.json();
+      status.textContent = `${coreState.remoteCores.length} cores available`;
+      renderCoreList();
+    } else if (coreState.tab === "installed") {
+      const res = await fetch(`${base}/api/cores/installed`);
+      coreState.installedCores = await res.json();
+      status.textContent = `${coreState.installedCores.length} cores installed`;
+      renderCoreList();
+    } else if (coreState.tab === "updates") {
+      status.textContent = "Checking for updates...";
+      const res = await fetch(`${base}/api/cores/updates`);
+      coreState.updates = await res.json();
+      status.textContent = coreState.updates.length
+        ? `${coreState.updates.length} update(s) available`
+        : "All cores are up to date";
+      renderCoreList();
+    }
+  } catch (err) {
+    list.innerHTML = `<div style="color:#e94560;padding:12px;">Failed to load: ${escHtml(err.message)}</div>`;
+  }
+}
+
+$("core-search").addEventListener("input", () => renderCoreList());
+
+function renderCoreList() {
+  const list = $("core-list");
+  const filter = $("core-search").value.toLowerCase();
+  list.innerHTML = "";
+
+  let items = [];
+  const installedNames = new Set(coreState.installedCores.map(c => c.name));
+
+  if (coreState.tab === "available") {
+    items = coreState.remoteCores.map(c => ({
+      name: c.name,
+      installed: installedNames.has(c.name),
+      hasUpdate: false,
+    }));
+  } else if (coreState.tab === "installed") {
+    items = coreState.installedCores.map(c => ({
+      name: c.name,
+      filename: c.filename,
+      installed: true,
+      size: c.size_bytes,
+      installedAt: c.installed_at,
+      hasUpdate: false,
+    }));
+  } else if (coreState.tab === "updates") {
+    items = coreState.updates.map(c => ({
+      name: c.name,
+      installed: true,
+      hasUpdate: true,
+      remoteDate: c.remote_date,
+    }));
+  }
+
+  if (filter) {
+    items = items.filter(c => c.name.toLowerCase().includes(filter));
+  }
+
+  if (items.length === 0) {
+    list.innerHTML = '<div style="color:#555;padding:12px;font-style:italic;">No cores found</div>';
+    return;
+  }
+
+  for (const core of items) {
+    const row = document.createElement("div");
+    row.className = "core-row";
+
+    let statusHtml = "";
+    let actionsHtml = "";
+
+    if (coreState.tab === "available") {
+      if (core.installed) {
+        statusHtml = '<span class="core-status installed">Installed</span>';
+        actionsHtml = `<button onclick="coreAction('download','${escHtml(core.name)}',this)">Reinstall</button>`;
+      } else {
+        actionsHtml = `<button onclick="coreAction('download','${escHtml(core.name)}',this)">Download</button>`;
+      }
+    } else if (coreState.tab === "installed") {
+      const sizeKb = core.size ? (core.size / 1024).toFixed(0) + " KB" : "";
+      statusHtml = `<span class="core-status">${sizeKb}</span>`;
+      actionsHtml = `
+        <button onclick="coreAction('download','${escHtml(core.name)}',this)">Update</button>
+        <button class="delete-btn" onclick="coreAction('delete','${escHtml(core.name)}',this)">Delete</button>
+      `;
+    } else if (coreState.tab === "updates") {
+      statusHtml = '<span class="core-status update">Update available</span>';
+      actionsHtml = `<button onclick="coreAction('download','${escHtml(core.name)}',this)">Update</button>`;
+    }
+
+    row.innerHTML = `
+      <span class="core-name">${escHtml(core.name)}</span>
+      ${statusHtml}
+      ${actionsHtml}
+    `;
+    list.appendChild(row);
+  }
+}
+
+async function coreAction(action, name, btn) {
+  const base = getCoreServerUrl();
+  const origText = btn.textContent;
+  btn.textContent = action === "delete" ? "Deleting..." : "Downloading...";
+  btn.classList.add("downloading");
+  btn.disabled = true;
+  const status = $("core-modal-status");
+
+  try {
+    if (action === "download") {
+      status.textContent = `Downloading ${name}...`;
+      const res = await fetch(`${base}/api/cores/download`, {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({ core_name: name }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.detail || `HTTP ${res.status}`);
+      }
+      const data = await res.json();
+      status.textContent = `Installed ${data.filename} (${(data.size_bytes/1024).toFixed(0)} KB)`;
+      btn.textContent = "Done!";
+      setTimeout(() => { loadCoreTab(); populateDropdowns(); }, 1000);
+    } else if (action === "delete") {
+      const res = await fetch(`${base}/api/cores/${encodeURIComponent(name)}`, {
+        method: "DELETE",
+      });
+      if (!res.ok && res.status !== 204) {
+        const err = await res.json();
+        throw new Error(err.detail || `HTTP ${res.status}`);
+      }
+      status.textContent = `Deleted ${name}`;
+      setTimeout(() => { loadCoreTab(); populateDropdowns(); }, 500);
+    }
+  } catch (err) {
+    status.textContent = `Error: ${err.message}`;
+    btn.textContent = origText;
+    btn.classList.remove("downloading");
+    btn.disabled = false;
+  }
+}
+
+// ============================================================
+// Reset button
+// ============================================================
+
+$("reset-btn").addEventListener("click", async () => {
+  if (!state.sessionId) return;
+  if (!confirm("Reset the game?")) return;
+  try {
+    await fetch(`${state.serverUrl}/api/sessions/${state.sessionId}/reset`, {
+      method: "POST",
+    });
+  } catch (e) {
+    console.error("Reset failed:", e);
+  }
+});
+
+// ============================================================
+// Audio status & unmute
+// ============================================================
+
+function updateAudioStatus(status) {
+  const el = $("audio-status");
+  const btn = $("unmute-btn");
+  if (status === "playing") {
+    el.textContent = "Game audio playing";
+    el.className = "playing";
+    btn.style.display = "none";
+  } else if (status === "blocked") {
+    el.textContent = "Audio blocked by browser";
+    el.className = "muted";
+    btn.style.display = "inline-block";
+  } else if (status === "muted") {
+    el.textContent = "Audio muted";
+    el.className = "muted";
+    btn.style.display = "none";
+  } else {
+    el.textContent = "No game audio";
+    el.className = "";
+    btn.style.display = "none";
+  }
+}
+
+$("unmute-btn").addEventListener("click", () => {
+  if (state.gameAudio) {
+    state.gameAudio.play().then(() => {
+      updateAudioStatus("playing");
+    }).catch((err) => {
+      console.error("Still can't play audio:", err);
+    });
+  }
+});
+
+// ============================================================
+// Player number selector
+// ============================================================
+
+function renderPlayerSelector() {
+  const el = $("player-selector");
+  if (!state.connected || state.role !== "player") {
+    el.innerHTML = "";
+    return;
+  }
+  el.innerHTML = "";
+  for (let i = 0; i < 4; i++) {
+    const btn = document.createElement("button");
+    btn.className = "player-slot-btn";
+    btn.textContent = `P${i + 1}`;
+    if (state.playerNum === i) {
+      btn.classList.add("active");
+    }
+    btn.addEventListener("click", () => switchPlayerSlot(i));
+    el.appendChild(btn);
+  }
+}
+
+async function switchPlayerSlot(num) {
+  if (num === state.playerNum) return;
+  try {
+    const res = await fetch(
+      `${state.serverUrl}/api/sessions/${state.sessionId}/player`, {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({ client_id: state.clientId, player_num: num }),
+    });
+    if (res.ok) {
+      state.playerNum = num;
+      saveSessionState();
+      updatePlayerList();
+      renderPlayerSelector();
+    } else {
+      const err = await res.json();
+      console.warn("Can't switch to P" + (num+1) + ": " + err.detail);
+    }
+  } catch (e) {
+    console.error("Player switch failed:", e);
+  }
+}
+
+// ============================================================
+// Startup
+// ============================================================
+
+async function init() {
+  // Load saved username
+  const saved = loadSessionState();
+  if (saved?.username) {
+    $("username-input").value = saved.username;
+  }
+
+  // Populate dropdowns and active sessions list
+  await Promise.all([populateDropdowns(), loadActiveSessions()]);
+
+  // Auto-reconnect if we have a saved session
+  if (saved?.sessionId) {
+    try {
+      // Verify session still exists
+      const res = await fetch(`${window.location.origin}/api/sessions/${saved.sessionId}`);
+      if (res.ok) {
+        state.serverUrl = saved.serverUrl || window.location.origin;
+        state.username  = saved.username || "Player";
+        state.role      = saved.role || "player";
+        $("username-input").value = state.username;
+        $("role-select").value = state.role;
+        await joinSession(saved.sessionId);
+        return;
+      }
+    } catch (e) {
+      console.log("Saved session no longer available:", e);
+    }
+    clearSessionState();
+  }
+}
+
+init();
 </script>
 </body>
 </html>

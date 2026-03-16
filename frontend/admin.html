@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RetroStream Admin</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #0d0d0d;
+      color: #e0e0e0;
+      font-family: 'Courier New', monospace;
+      min-height: 100vh;
+    }
+
+    /* ── Header ── */
+    header {
+      background: #1a1a2e;
+      border-bottom: 2px solid #e94560;
+      padding: 12px 24px;
+      display: flex;
+      align-items: center;
+      gap: 20px;
+    }
+    header h1 {
+      font-size: 1.3rem;
+      color: #e94560;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+    }
+    header .subtitle {
+      font-size: 0.75rem;
+      color: #555;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+    }
+    header a {
+      margin-left: auto;
+      color: #a0a0c0;
+      font-size: 0.8rem;
+      text-decoration: none;
+      border: 1px solid #0f3460;
+      padding: 5px 12px;
+      border-radius: 4px;
+    }
+    header a:hover { border-color: #e94560; color: #e94560; }
+
+    /* ── Status bar ── */
+    #status-bar {
+      background: #111;
+      border-bottom: 1px solid #1a1a1a;
+      padding: 8px 24px;
+      display: flex;
+      gap: 32px;
+      font-size: 0.75rem;
+      color: #555;
+    }
+    .stat-item { display: flex; gap: 6px; align-items: center; }
+    .stat-value { color: #00ff88; font-weight: bold; }
+    .stat-value.warn { color: #ffa500; }
+
+    /* ── Layout ── */
+    .panels {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      padding: 16px 24px;
+    }
+    @media (max-width: 900px) {
+      .panels { grid-template-columns: 1fr; }
+    }
+
+    /* ── Panel ── */
+    .panel {
+      background: #111;
+      border: 1px solid #1a1a1a;
+      border-radius: 6px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .panel-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 16px;
+      background: #1a1a2e;
+      border-bottom: 1px solid #0f3460;
+    }
+    .panel-header h2 {
+      font-size: 0.8rem;
+      letter-spacing: 2px;
+      color: #e94560;
+      text-transform: uppercase;
+      flex: 1;
+    }
+    .panel-header button {
+      background: #16213e;
+      border: 1px solid #0f3460;
+      border-radius: 4px;
+      color: #a0a0c0;
+      padding: 4px 10px;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 0.7rem;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+    .panel-header button:hover { border-color: #e94560; color: #e94560; }
+    .panel-body {
+      padding: 12px 16px;
+      overflow-y: auto;
+      max-height: 400px;
+      scrollbar-width: thin;
+      scrollbar-color: #333 transparent;
+    }
+
+    /* ── Tabs inside panels ── */
+    .panel-tabs {
+      display: flex;
+      gap: 4px;
+      padding: 8px 16px;
+      background: #0d0d1a;
+      border-bottom: 1px solid #1a1a1a;
+    }
+    .panel-tab {
+      background: none;
+      border: 1px solid transparent;
+      border-radius: 4px;
+      color: #555;
+      padding: 4px 12px;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 0.72rem;
+      letter-spacing: 1px;
+    }
+    .panel-tab.active { border-color: #e94560; color: #e94560; }
+    .panel-tab:hover { color: #aaa; }
+
+    /* ── Search bar ── */
+    .panel-search {
+      width: 100%;
+      background: #0d0d0d;
+      border: 1px solid #222;
+      border-radius: 4px;
+      color: #e0e0e0;
+      padding: 7px 10px;
+      font-family: inherit;
+      font-size: 0.8rem;
+      outline: none;
+      margin-bottom: 10px;
+    }
+    .panel-search:focus { border-color: #e94560; }
+
+    /* ── Table rows ── */
+    .item-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 10px;
+      border-radius: 4px;
+      font-size: 0.78rem;
+      margin-bottom: 4px;
+      background: #0d0d0d;
+    }
+    .item-row:hover { background: #16213e; }
+    .item-name { flex: 1; color: #e0e0e0; }
+    .item-meta { color: #555; font-size: 0.7rem; }
+    .item-meta.green { color: #00ff88; }
+    .item-meta.orange { color: #ffa500; }
+    .item-meta.red { color: #e94560; }
+    .item-row button {
+      background: #16213e;
+      border: 1px solid #0f3460;
+      border-radius: 4px;
+      color: #aaa;
+      padding: 3px 8px;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 0.7rem;
+    }
+    .item-row button:hover { border-color: #e94560; color: #e94560; }
+    .item-row button.danger:hover { border-color: #ff4444; color: #ff4444; }
+    .item-row button.working {
+      border-color: #ffa500;
+      color: #ffa500;
+      cursor: wait;
+    }
+
+    /* ── Empty/loading states ── */
+    .empty-msg {
+      color: #444;
+      font-size: 0.8rem;
+      font-style: italic;
+      padding: 16px 0;
+      text-align: center;
+    }
+    .error-msg { color: #e94560; }
+    .panel-footer {
+      padding: 8px 16px;
+      border-top: 1px solid #1a1a1a;
+      font-size: 0.7rem;
+      color: #444;
+    }
+
+    /* ── Session detail badges ── */
+    .badge {
+      display: inline-block;
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-size: 0.65rem;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+    }
+    .badge.running { background: #0a2e0a; color: #00ff88; border: 1px solid #00ff88; }
+    .badge.players { background: #1a1a00; color: #ffa500; border: 1px solid #ffa500; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>RetroStream</h1>
+  <span class="subtitle">Admin Dashboard</span>
+  <a href="/">Back to Player View</a>
+</header>
+
+<div id="status-bar">
+  <div class="stat-item">Sessions: <span class="stat-value" id="stat-sessions">-</span></div>
+  <div class="stat-item">Cores: <span class="stat-value" id="stat-cores">-</span></div>
+  <div class="stat-item">ROMs: <span class="stat-value" id="stat-roms">-</span></div>
+  <div class="stat-item">Encoders: <span class="stat-value" id="stat-encoders">-</span></div>
+</div>
+
+<div class="panels">
+
+  <!-- ── Sessions panel ── -->
+  <div class="panel">
+    <div class="panel-header">
+      <h2>Active Sessions</h2>
+      <button onclick="loadSessions()">Refresh</button>
+    </div>
+    <div class="panel-body" id="sessions-body">
+      <div class="empty-msg">Loading...</div>
+    </div>
+  </div>
+
+  <!-- ── ROMs panel ── -->
+  <div class="panel">
+    <div class="panel-header">
+      <h2>ROMs</h2>
+      <button onclick="loadRoms()">Refresh</button>
+    </div>
+    <div class="panel-body" id="roms-body">
+      <input class="panel-search" id="rom-search" type="text" placeholder="Search ROMs..." oninput="renderRoms()" />
+      <div id="rom-list"></div>
+    </div>
+  </div>
+
+  <!-- ── Cores panel (full width) ── -->
+  <div class="panel" style="grid-column: 1 / -1;">
+    <div class="panel-header">
+      <h2>Cores</h2>
+      <button onclick="loadCores()">Refresh</button>
+    </div>
+    <div class="panel-tabs">
+      <button class="panel-tab active" data-ctab="installed" onclick="switchCoreTab('installed')">Installed</button>
+      <button class="panel-tab" data-ctab="available" onclick="switchCoreTab('available')">Available to Download</button>
+      <button class="panel-tab" data-ctab="updates" onclick="switchCoreTab('updates')">Check Updates</button>
+    </div>
+    <div class="panel-body" id="cores-body">
+      <input class="panel-search" id="core-search" type="text" placeholder="Search cores..." oninput="renderCores()" />
+      <div id="core-list"></div>
+    </div>
+    <div class="panel-footer" id="core-footer"></div>
+  </div>
+
+</div>
+
+<script>
+const BASE = window.location.origin;
+
+// ============================================================
+// State
+// ============================================================
+const data = {
+  sessions: [],
+  roms: [],
+  installedCores: [],
+  remoteCores: [],
+  updates: [],
+  coreTab: "installed",
+};
+
+// ============================================================
+// Helpers
+// ============================================================
+function esc(s) {
+  return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+}
+function fmtSize(bytes) {
+  if (bytes < 1024) return bytes + " B";
+  if (bytes < 1024*1024) return (bytes/1024).toFixed(0) + " KB";
+  return (bytes/(1024*1024)).toFixed(1) + " MB";
+}
+
+async function api(path, opts) {
+  const res = await fetch(`${BASE}${path}`, opts);
+  if (opts?.method === "DELETE") return res;
+  return res.json();
+}
+
+// ============================================================
+// Sessions
+// ============================================================
+async function loadSessions() {
+  const body = document.getElementById("sessions-body");
+  try {
+    const status = await api("/api/status");
+    data.sessions = status.sessions || [];
+    document.getElementById("stat-sessions").textContent = status.active_sessions;
+    document.getElementById("stat-encoders").textContent =
+      status.encoders?.active ?? "-";
+    renderSessions();
+  } catch (e) {
+    body.innerHTML = `<div class="empty-msg error-msg">Failed to load: ${esc(e.message)}</div>`;
+  }
+}
+
+function renderSessions() {
+  const body = document.getElementById("sessions-body");
+  if (data.sessions.length === 0) {
+    body.innerHTML = '<div class="empty-msg">No active sessions</div>';
+    return;
+  }
+  body.innerHTML = data.sessions.map(s => `
+    <div class="item-row">
+      <span class="item-name">
+        <strong>${esc(s.session_id)}</strong>
+        <br><span style="color:#555;font-size:0.7rem">
+          Core: ${esc(s.core_path || "-")} | ROM: ${esc(s.rom_path || "-")}
+        </span>
+      </span>
+      <span class="badge running">Running</span>
+      <span class="badge players">${s.players ?? "?"} players</span>
+      <button class="danger" onclick="killSession('${esc(s.session_id)}')">Kill</button>
+    </div>
+  `).join("");
+}
+
+async function killSession(sid) {
+  if (!confirm(`Kill session ${sid}?`)) return;
+  try {
+    await api(`/api/sessions/${sid}`, { method: "DELETE" });
+    await loadSessions();
+  } catch (e) {
+    alert("Failed: " + e.message);
+  }
+}
+
+// ============================================================
+// ROMs
+// ============================================================
+async function loadRoms() {
+  const list = document.getElementById("rom-list");
+  try {
+    data.roms = await api("/api/roms");
+    document.getElementById("stat-roms").textContent = data.roms.length;
+    renderRoms();
+  } catch (e) {
+    list.innerHTML = `<div class="empty-msg error-msg">Failed to load: ${esc(e.message)}</div>`;
+  }
+}
+
+function renderRoms() {
+  const list = document.getElementById("rom-list");
+  const filter = document.getElementById("rom-search").value.toLowerCase();
+  let roms = data.roms;
+  if (filter) roms = roms.filter(r => r.name.toLowerCase().includes(filter) || r.filename.toLowerCase().includes(filter));
+
+  if (roms.length === 0) {
+    list.innerHTML = '<div class="empty-msg">No ROMs found in roms/ directory</div>';
+    return;
+  }
+
+  list.innerHTML = roms.map(r => `
+    <div class="item-row">
+      <span class="item-name">${esc(r.filename)}</span>
+      <span class="item-meta">${fmtSize(r.size_bytes)}</span>
+      <span class="item-meta">${esc(r.extension)}</span>
+    </div>
+  `).join("");
+}
+
+// ============================================================
+// Cores
+// ============================================================
+function switchCoreTab(tab) {
+  data.coreTab = tab;
+  document.querySelectorAll("[data-ctab]").forEach(b =>
+    b.classList.toggle("active", b.dataset.ctab === tab)
+  );
+  loadCores();
+}
+
+async function loadCores() {
+  const list = document.getElementById("core-list");
+  const footer = document.getElementById("core-footer");
+  list.innerHTML = '<div class="empty-msg">Loading...</div>';
+  footer.textContent = "";
+
+  try {
+    if (data.coreTab === "installed") {
+      data.installedCores = await api("/api/cores/installed");
+      document.getElementById("stat-cores").textContent = data.installedCores.length;
+      footer.textContent = `${data.installedCores.length} core(s) installed`;
+      renderCores();
+    } else if (data.coreTab === "available") {
+      const [remote, installed] = await Promise.all([
+        api("/api/cores/remote"),
+        api("/api/cores/installed"),
+      ]);
+      data.remoteCores = remote;
+      data.installedCores = installed;
+      document.getElementById("stat-cores").textContent = installed.length;
+      footer.textContent = `${remote.length} cores available from buildbot`;
+      renderCores();
+    } else if (data.coreTab === "updates") {
+      footer.textContent = "Checking for updates...";
+      data.updates = await api("/api/cores/updates");
+      footer.textContent = data.updates.length
+        ? `${data.updates.length} update(s) available`
+        : "All installed cores are up to date";
+      renderCores();
+    }
+  } catch (e) {
+    list.innerHTML = `<div class="empty-msg error-msg">Failed: ${esc(e.message)}</div>`;
+  }
+}
+
+function renderCores() {
+  const list = document.getElementById("core-list");
+  const filter = document.getElementById("core-search").value.toLowerCase();
+  const installedSet = new Set(data.installedCores.map(c => c.name));
+  let items = [];
+
+  if (data.coreTab === "installed") {
+    items = data.installedCores.map(c => ({
+      name: c.name,
+      filename: c.filename,
+      path: c.path,
+      size: c.size_bytes,
+      installed: true,
+    }));
+  } else if (data.coreTab === "available") {
+    items = data.remoteCores.map(c => ({
+      name: c.name,
+      installed: installedSet.has(c.name),
+    }));
+  } else if (data.coreTab === "updates") {
+    items = data.updates.map(c => ({
+      name: c.name,
+      remoteDate: c.remote_date,
+    }));
+  }
+
+  if (filter) items = items.filter(c => c.name.toLowerCase().includes(filter));
+
+  if (items.length === 0) {
+    list.innerHTML = '<div class="empty-msg">No cores found</div>';
+    return;
+  }
+
+  if (data.coreTab === "installed") {
+    list.innerHTML = items.map(c => `
+      <div class="item-row">
+        <span class="item-name">${esc(c.name)}</span>
+        <span class="item-meta">${esc(c.filename)}</span>
+        <span class="item-meta">${fmtSize(c.size)}</span>
+        <button onclick="coreDownload('${esc(c.name)}',this)">Reinstall</button>
+        <button class="danger" onclick="coreDelete('${esc(c.name)}')">Delete</button>
+      </div>
+    `).join("");
+  } else if (data.coreTab === "available") {
+    list.innerHTML = items.map(c => `
+      <div class="item-row">
+        <span class="item-name">${esc(c.name)}</span>
+        ${c.installed
+          ? '<span class="item-meta green">Installed</span><button onclick="coreDownload(\'' + esc(c.name) + '\',this)">Reinstall</button>'
+          : '<button onclick="coreDownload(\'' + esc(c.name) + '\',this)">Download</button>'
+        }
+      </div>
+    `).join("");
+  } else if (data.coreTab === "updates") {
+    list.innerHTML = items.map(c => `
+      <div class="item-row">
+        <span class="item-name">${esc(c.name)}</span>
+        <span class="item-meta orange">Update available</span>
+        <button onclick="coreDownload('${esc(c.name)}',this)">Update</button>
+      </div>
+    `).join("");
+  }
+}
+
+async function coreDownload(name, btn) {
+  const orig = btn.textContent;
+  btn.textContent = "Downloading...";
+  btn.classList.add("working");
+  btn.disabled = true;
+  const footer = document.getElementById("core-footer");
+  footer.textContent = `Downloading ${name}...`;
+
+  try {
+    const res = await fetch(`${BASE}/api/cores/download`, {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({ core_name: name }),
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.detail || `HTTP ${res.status}`);
+    }
+    const d = await res.json();
+    footer.textContent = `Installed ${d.filename} (${fmtSize(d.size_bytes)})`;
+    btn.textContent = "Done!";
+    setTimeout(() => loadCores(), 1000);
+  } catch (e) {
+    footer.textContent = `Error: ${e.message}`;
+    btn.textContent = orig;
+    btn.classList.remove("working");
+    btn.disabled = false;
+  }
+}
+
+async function coreDelete(name) {
+  if (!confirm(`Delete core "${name}"?`)) return;
+  try {
+    await fetch(`${BASE}/api/cores/${encodeURIComponent(name)}`, { method: "DELETE" });
+    document.getElementById("core-footer").textContent = `Deleted ${name}`;
+    setTimeout(() => loadCores(), 500);
+  } catch (e) {
+    alert("Failed: " + e.message);
+  }
+}
+
+// ============================================================
+// Auto-refresh
+// ============================================================
+let refreshInterval = null;
+
+function startAutoRefresh() {
+  loadSessions();
+  loadRoms();
+  loadCores();
+  // Refresh sessions every 5 seconds
+  refreshInterval = setInterval(loadSessions, 5000);
+}
+
+startAutoRefresh();
+</script>
+</body>
+</html>

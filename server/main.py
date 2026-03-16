@@ -11,6 +11,16 @@ Routes:
     DELETE /api/sessions/{sid}      Destroy session
     GET  /api/status                Overall server status
 
+    GET    /api/cores/remote        List downloadable cores from buildbot
+    GET    /api/cores/installed     List locally installed cores
+    POST   /api/cores/download      Download a core
+    GET    /api/cores/updates       Check for core updates
+    DELETE /api/cores/{name}        Delete an installed core
+
+    GET  /api/roms                  List available ROMs
+
+    GET  /admin                     Admin dashboard
+
     POST /rtc/offer/{sid}           WebRTC SDP offer → answer
 
     WS   /ws/input/{sid}            Input WebSocket (per client)
@@ -26,6 +36,8 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional
 
+import aiohttp
+
 from fastapi import (
     FastAPI, WebSocket, WebSocketDisconnect,
     HTTPException,
@@ -36,6 +48,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from .session_manager import session_manager
+from .core_downloader import core_downloader
 
 logging.basicConfig(
     level=logging.INFO,
@@ -129,6 +142,115 @@ async def delete_session(session_id: str):
 @app.get("/api/status")
 async def server_status():
     return session_manager.status()
+
+
+@app.post("/api/sessions/{session_id}/reset", status_code=200)
+async def reset_session(session_id: str):
+    session = session_manager.get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    session.reset_game()
+    return {"status": "ok"}
+
+
+class SetPlayerRequest(BaseModel):
+    client_id: str
+    player_num: int
+
+
+@app.post("/api/sessions/{session_id}/player", status_code=200)
+async def set_player_num(session_id: str, req: SetPlayerRequest):
+    session = session_manager.get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    ok = session.set_player_num(req.client_id, req.player_num)
+    if not ok:
+        raise HTTPException(status_code=409, detail="Player slot unavailable")
+    return {"status": "ok", "player_num": req.player_num}
+
+
+# ---------------------------------------------------------------------------
+# REST — core management
+# ---------------------------------------------------------------------------
+
+class DownloadCoreRequest(BaseModel):
+    core_name: str
+
+
+@app.get("/api/cores/remote")
+async def list_remote_cores():
+    try:
+        return await core_downloader.list_remote_cores()
+    except Exception as e:
+        log.exception("Failed to fetch remote core list")
+        raise HTTPException(status_code=502, detail=str(e))
+
+
+@app.get("/api/cores/installed")
+async def list_installed_cores():
+    return await core_downloader.list_installed_cores()
+
+
+@app.post("/api/cores/download", status_code=201)
+async def download_core(req: DownloadCoreRequest):
+    try:
+        result = await core_downloader.download_core(req.core_name)
+        return result
+    except aiohttp.ClientResponseError as e:
+        if e.status == 404:
+            raise HTTPException(status_code=404, detail=f"Core not found: {req.core_name}")
+        raise HTTPException(status_code=502, detail=str(e))
+    except Exception as e:
+        log.exception("Failed to download core")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/cores/updates")
+async def check_core_updates():
+    try:
+        return await core_downloader.check_updates()
+    except Exception as e:
+        log.exception("Failed to check for updates")
+        raise HTTPException(status_code=502, detail=str(e))
+
+
+@app.delete("/api/cores/{core_name}", status_code=204)
+async def delete_core(core_name: str):
+    deleted = await core_downloader.delete_core(core_name)
+    if not deleted:
+        raise HTTPException(status_code=404, detail=f"Core not found: {core_name}")
+
+
+# ---------------------------------------------------------------------------
+# REST — ROM listing
+# ---------------------------------------------------------------------------
+
+ROM_EXTENSIONS = {
+    ".nes", ".sfc", ".smc", ".gb", ".gbc", ".gba", ".n64", ".z64", ".v64",
+    ".gen", ".md", ".smd", ".gg", ".sms", ".pce", ".ngp", ".ngc", ".ws",
+    ".wsc", ".a26", ".a78", ".lnx", ".jag", ".vb", ".nds", ".3ds",
+    ".iso", ".bin", ".cue", ".chd", ".pbp", ".cso",
+    ".zip", ".7z",
+}
+
+roms_dir = Path("roms")
+
+
+@app.get("/api/roms")
+async def list_roms():
+    if not roms_dir.exists():
+        return []
+    roms = []
+    for f in sorted(roms_dir.rglob("*")):
+        if f.is_file() and f.suffix.lower() in ROM_EXTENSIONS:
+            roms.append({
+                "name": f.stem,
+                "filename": f.name,
+                "path": str(f),
+                "size_bytes": f.stat().st_size,
+                "extension": f.suffix.lower(),
+            })
+    return roms
 
 
 # ---------------------------------------------------------------------------
@@ -301,6 +423,14 @@ async def ws_chat(websocket: WebSocket, session_id: str):
 # Frontend fallback
 # ---------------------------------------------------------------------------
 
+@app.get("/admin")
+async def admin_dashboard():
+    admin_file = frontend_path / "admin.html"
+    if admin_file.exists():
+        return HTMLResponse(admin_file.read_text())
+    raise HTTPException(status_code=404, detail="Admin page not found")
+
+
 @app.get("/")
 async def root():
     index = frontend_path / "index.html"
@@ -313,6 +443,7 @@ async def root():
     <ul>
       <li><a href="/docs">API Docs (Swagger)</a></li>
       <li><a href="/api/status">Server Status</a></li>
+      <li><a href="/admin">Admin Dashboard</a></li>
     </ul>
     </body></html>
     """)

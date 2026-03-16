@@ -1,8 +1,8 @@
 """
 session.py
 
-A GameSession owns one libretro core process, one FFmpeg encoder,
-one MemoryWatcher, and the WebRTC peer connections for all players/spectators.
+A GameSession owns one libretro core process, the WebRTC peer connections
+for all players/spectators, and a MemoryWatcher.
 
 Lifecycle:
     session = await GameSession.create(config)
@@ -35,7 +35,6 @@ import fractions
 import numpy as np
 
 from .libretro_core import LibretroCore, RETRO_MEMORY_SYSTEM_RAM
-from .encode_queue import encode_manager, SessionEncoder
 from .memory_watcher import MemoryWatcher, load_memory_map_for_rom
 
 log = logging.getLogger(__name__)
@@ -66,48 +65,170 @@ class ConnectedClient:
 
 
 # ---------------------------------------------------------------------------
-# aiortc video track that consumes NAL packets from the encoder
+# aiortc video track — delivers raw av.VideoFrame from libretro core
 # ---------------------------------------------------------------------------
 
 class LibretroVideoTrack(VideoStreamTrack):
     """
-    Feeds encoded H.264 NAL units into aiortc as video frames.
-    aiortc will packetize these into RTP for WebRTC.
+    Receives raw RGB24 frames from the libretro core thread and delivers
+    them as av.VideoFrame objects to aiortc, which encodes them for WebRTC.
     """
 
     kind = "video"
 
-    def __init__(self, encoder: SessionEncoder):
+    def __init__(self, width: int, height: int, fps: float,
+                 loop: asyncio.AbstractEventLoop):
         super().__init__()
-        self._encoder   = encoder
-        self._queue:    asyncio.Queue = asyncio.Queue(maxsize=8)
-        self._task:     Optional[asyncio.Task] = None
+        self._width     = width
+        self._height    = height
+        self._fps       = fps
+        self._loop      = loop
         self._pts       = 0
-        self._time_base = fractions.Fraction(1, 90000)   # RTP clock
+        self._time_base = fractions.Fraction(1, 90000)
+        # Latest frame buffer (written from core thread, read from asyncio)
+        self._latest_frame: Optional[bytes] = None
+        self._frame_event = asyncio.Event()
+        self._stopped = False
+        self._started = False  # send black frame immediately on first recv
 
-    async def start_consuming(self):
-        self._task = asyncio.create_task(self._consume())
-
-    async def _consume(self):
-        async for packet in self._encoder.packet_iterator():
-            try:
-                self._queue.put_nowait(packet)
-            except asyncio.QueueFull:
-                pass  # drop — client will get next keyframe
+    def push_frame(self, rgb24: bytes):
+        """Called from the core thread. Stores frame and signals waiters."""
+        self._latest_frame = rgb24
+        try:
+            self._loop.call_soon_threadsafe(self._frame_event.set)
+        except RuntimeError:
+            pass  # loop closed
 
     async def recv(self):
         """Called by aiortc to get the next video frame."""
-        data = await self._queue.get()
-        packet = av.Packet(data)
-        packet.pts      = self._pts
-        packet.dts      = self._pts
-        packet.time_base = self._time_base
-        self._pts += int(90000 / self._encoder.fps)
-        return packet
+        if not self._started:
+            # Send a black frame immediately so WebRTC negotiation completes fast
+            self._started = True
+            frame = av.VideoFrame(self._width, self._height, 'rgb24')
+            frame.pts = self._pts
+            frame.time_base = self._time_base
+            self._pts += int(90000 / self._fps)
+            return frame
+
+        # Wait for a real frame from the core
+        while not self._stopped:
+            try:
+                await asyncio.wait_for(self._frame_event.wait(), timeout=0.5)
+                break
+            except asyncio.TimeoutError:
+                if self._latest_frame is not None:
+                    break
+                # No frame yet — return last or black
+                frame = av.VideoFrame(self._width, self._height, 'rgb24')
+                frame.pts = self._pts
+                frame.time_base = self._time_base
+                self._pts += int(90000 / self._fps)
+                return frame
+
+        self._frame_event.clear()
+        rgb24 = self._latest_frame
+
+        if rgb24 is None:
+            frame = av.VideoFrame(self._width, self._height, 'rgb24')
+        else:
+            array = np.frombuffer(rgb24, dtype=np.uint8).reshape(
+                (self._height, self._width, 3)
+            )
+            frame = av.VideoFrame.from_ndarray(array, format='rgb24')
+
+        frame.pts = self._pts
+        frame.time_base = self._time_base
+        self._pts += int(90000 / self._fps)
+        return frame
 
     async def stop(self):
-        if self._task:
-            self._task.cancel()
+        self._stopped = True
+        self._frame_event.set()  # unblock any waiting recv()
+        await super().stop()
+
+
+# ---------------------------------------------------------------------------
+# aiortc audio track — delivers PCM from libretro core as av.AudioFrame
+# ---------------------------------------------------------------------------
+
+class LibretroAudioTrack(AudioStreamTrack):
+    """
+    Receives interleaved int16 stereo PCM from the libretro core thread
+    and delivers it as av.AudioFrame objects to aiortc.
+    """
+
+    kind = "audio"
+
+    def __init__(self, sample_rate: int, loop: asyncio.AbstractEventLoop):
+        super().__init__()
+        self._sample_rate = sample_rate
+        self._loop        = loop
+        self._pts         = 0
+        self._time_base   = fractions.Fraction(1, sample_rate)
+        self._queue: asyncio.Queue = asyncio.Queue(maxsize=32)
+        self._stopped = False
+        self._recv_count = 0
+        self._push_count = 0
+
+    def push_audio(self, pcm: bytes):
+        """Called from core thread. pcm is interleaved int16 stereo."""
+        self._push_count += 1
+        if self._push_count <= 5:
+            log.info("AudioTrack: push_audio #%d, %d bytes", self._push_count, len(pcm))
+        try:
+            self._loop.call_soon_threadsafe(self._queue_put, pcm)
+        except RuntimeError:
+            pass
+
+    def _queue_put(self, pcm: bytes):
+        try:
+            self._queue.put_nowait(pcm)
+        except asyncio.QueueFull:
+            # Drop oldest to keep latency low
+            try:
+                self._queue.get_nowait()
+            except asyncio.QueueEmpty:
+                pass
+            try:
+                self._queue.put_nowait(pcm)
+            except asyncio.QueueFull:
+                pass
+
+    async def recv(self):
+        """Called by aiortc to get the next audio frame."""
+        self._recv_count += 1
+        if self._recv_count <= 5:
+            log.info("AudioTrack: recv() called #%d, queue size=%d",
+                     self._recv_count, self._queue.qsize())
+        try:
+            pcm = await asyncio.wait_for(self._queue.get(), timeout=1.0)
+        except asyncio.TimeoutError:
+            # Generate silence (960 samples = 20ms at 48kHz, common WebRTC frame)
+            samples = 960
+            pcm = b'\x00' * (samples * 2 * 2)  # stereo int16
+
+        # Convert to numpy array: interleaved int16 stereo
+        samples_array = np.frombuffer(pcm, dtype=np.int16)
+        num_samples = len(samples_array) // 2  # stereo → per-channel count
+
+        if num_samples == 0:
+            num_samples = 960
+            samples_array = np.zeros(num_samples * 2, dtype=np.int16)
+
+        # Pack as (1, total_samples) for av s16 packed format (required by Opus encoder)
+        packed = samples_array.reshape(1, -1)  # shape: (1, num_samples*2)
+
+        frame = av.AudioFrame.from_ndarray(
+            packed, format='s16', layout='stereo'
+        )
+        frame.sample_rate = self._sample_rate
+        frame.pts = self._pts
+        frame.time_base = self._time_base
+        self._pts += num_samples
+        return frame
+
+    async def stop(self):
+        self._stopped = True
         await super().stop()
 
 
@@ -123,7 +244,6 @@ class GameSession:
         self.created_at = time.time()
 
         self._core:    Optional[LibretroCore]    = None
-        self._encoder: Optional[SessionEncoder] = None
         self._watcher: Optional[MemoryWatcher]  = None
         self._clients: dict[str, ConnectedClient] = {}
         self._loop:    Optional[asyncio.AbstractEventLoop] = None
@@ -135,6 +255,10 @@ class GameSession:
         # Input state: player_num → button bitmask
         self._inputs: dict[int, int] = {i: 0 for i in range(4)}
         self._input_lock = threading.Lock()
+
+        # Shared tracks for all clients
+        self._video_track: Optional[LibretroVideoTrack] = None
+        self._audio_track: Optional[LibretroAudioTrack] = None
 
     # ------------------------------------------------------------------
     # Factory
@@ -167,14 +291,20 @@ class GameSession:
         if not self._core.load_game(self.config.rom_path):
             raise RuntimeError(f"Failed to load ROM: {self.config.rom_path}")
 
-        # 2. Start encoder
-        self._encoder = encode_manager.create(
-            self.session_id,
+        # 2. Create shared video and audio tracks
+        self._video_track = LibretroVideoTrack(
             self._core.width,
             self._core.height,
             self._core.fps,
             self._loop,
         )
+        self._audio_track = LibretroAudioTrack(
+            int(self._core.sample_rate),
+            self._loop,
+        )
+        log.info("Session %s: video=%dx%d@%.1ffps audio=%dHz",
+                 self.session_id, self._core.width, self._core.height,
+                 self._core.fps, int(self._core.sample_rate))
 
         # 3. Memory watcher
         mmap = load_memory_map_for_rom(
@@ -205,12 +335,16 @@ class GameSession:
         if self._watcher:
             await self._watcher.stop()
 
+        # Stop tracks
+        if self._video_track:
+            await self._video_track.stop()
+        if self._audio_track:
+            await self._audio_track.stop()
+
         # Close all peer connections
         for client in list(self._clients.values()):
             await client.pc.close()
         self._clients.clear()
-
-        encode_manager.destroy(self.session_id)
 
         if self._core:
             self._core.unload()
@@ -229,6 +363,10 @@ class GameSession:
         target_fps  = self._core.fps
         frame_time  = 1.0 / target_fps
         next_frame  = time.monotonic()
+        frame_num   = 0
+
+        log.info("[%s] Core loop starting: fps=%.2f frame_time=%.4fs",
+                 self.session_id, target_fps, frame_time)
 
         while self._running:
             # Apply merged inputs
@@ -236,7 +374,19 @@ class GameSession:
                 for player, buttons in self._inputs.items():
                     self._core.set_input(player, buttons)
 
-            self._core.run()
+            frame_num += 1
+            if frame_num <= 5:
+                log.info("[%s] Running frame #%d...", self.session_id, frame_num)
+
+            try:
+                self._core.run()
+            except Exception as e:
+                log.error("[%s] Exception on frame #%d: %s", self.session_id, frame_num, e)
+                self._running = False
+                break
+
+            if frame_num <= 5:
+                log.info("[%s] Frame #%d complete", self.session_id, frame_num)
 
             # Precise frame pacing
             next_frame += frame_time
@@ -252,12 +402,12 @@ class GameSession:
     # ------------------------------------------------------------------
 
     def _on_frame(self, rgb24: bytes, width: int, height: int):
-        if self._encoder:
-            self._encoder.push_frame(rgb24)
+        if self._video_track:
+            self._video_track.push_frame(rgb24)
 
     def _on_audio(self, pcm: bytes):
-        # TODO: feed into aiortc audio track (future: per-client audio mixing)
-        pass
+        if self._audio_track:
+            self._audio_track.push_audio(pcm)
 
     # ------------------------------------------------------------------
     # WebRTC
@@ -279,10 +429,9 @@ class GameSession:
 
         pc = RTCPeerConnection()
 
-        # Video track
-        video_track = LibretroVideoTrack(self._encoder)
-        await video_track.start_consuming()
-        pc.addTrack(video_track)
+        # Add the shared video and audio tracks
+        pc.addTrack(self._video_track)
+        pc.addTrack(self._audio_track)
 
         # Handle ICE connection state
         @pc.on("connectionstatechange")
@@ -315,6 +464,15 @@ class GameSession:
         answer = await pc.createAnswer()
         await pc.setLocalDescription(answer)
 
+        # Log SDP details for debugging
+        answer_sdp = pc.localDescription.sdp
+        audio_lines = [l for l in answer_sdp.split('\n') if 'audio' in l.lower() or 'm=audio' in l]
+        video_lines = [l for l in answer_sdp.split('\n') if 'm=video' in l]
+        log.info("[%s] SDP answer: %d video m-lines, %d audio m-lines",
+                 self.session_id, len(video_lines), len(audio_lines))
+        for line in audio_lines:
+            log.info("[%s] SDP audio: %s", self.session_id, line.strip())
+
         log.info("[%s] Client %s joined as %s (player %s)",
                  self.session_id, client_id, role, player_num)
 
@@ -336,8 +494,6 @@ class GameSession:
                 frame = await track.recv()
                 for cid, client in self._clients.items():
                     if cid != sender_id:
-                        # Add audio track to their PC if not already present
-                        # (Full implementation would use a mixing bus)
                         pass
             except MediaStreamError:
                 break
@@ -345,6 +501,12 @@ class GameSession:
     # ------------------------------------------------------------------
     # Input handling
     # ------------------------------------------------------------------
+
+    def reset_game(self):
+        """Reset the running game (like pressing the reset button on a console)."""
+        if self._core:
+            self._core.reset()
+            log.info("[%s] Game reset", self.session_id)
 
     def apply_input(self, client_id: str, buttons: int):
         """
@@ -355,6 +517,29 @@ class GameSession:
         if client and client.player_num is not None:
             with self._input_lock:
                 self._inputs[client.player_num] = buttons
+
+    def set_player_num(self, client_id: str, player_num: int) -> bool:
+        """
+        Change which player slot a client controls (0-3).
+        Returns True if successful, False if slot is taken or invalid.
+        """
+        if player_num < 0 or player_num >= self.config.max_players:
+            return False
+        client = self._clients.get(client_id)
+        if not client:
+            return False
+        # Check if slot is already taken by another client
+        for cid, c in self._clients.items():
+            if cid != client_id and c.player_num == player_num:
+                return False
+        # Clear old slot
+        if client.player_num is not None:
+            with self._input_lock:
+                self._inputs[client.player_num] = 0
+        client.player_num = player_num
+        log.info("[%s] Client %s now controls player %d",
+                 self.session_id, client_id, player_num)
+        return True
 
     # ------------------------------------------------------------------
     # Memory watch
