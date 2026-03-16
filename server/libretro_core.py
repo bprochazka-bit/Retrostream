@@ -212,22 +212,33 @@ class LibretroCore:
         if cmd == RETRO_ENVIRONMENT_SET_PIXEL_FORMAT:
             fmt = ctypes.cast(data, ctypes.POINTER(ctypes.c_int)).contents.value
             self._pixel_fmt = fmt
-            log.debug("Core pixel format: %d", fmt)
+            log.info("ENV SET_PIXEL_FORMAT: %d (%s)", fmt,
+                     {0: "0RGB1555", 1: "XRGB8888", 2: "RGB565"}.get(fmt, "unknown"))
             return True
         if cmd == RETRO_ENVIRONMENT_GET_SYSTEM_DIRECTORY:
             ptr = ctypes.cast(data, ctypes.POINTER(ctypes.c_char_p))
             ptr[0] = self.system_dir
+            log.info("ENV GET_SYSTEM_DIRECTORY -> %s", self.system_dir)
             return True
         if cmd == RETRO_ENVIRONMENT_GET_SAVE_DIRECTORY:
             ptr = ctypes.cast(data, ctypes.POINTER(ctypes.c_char_p))
             ptr[0] = self.save_dir
+            log.info("ENV GET_SAVE_DIRECTORY -> %s", self.save_dir)
             return True
         if cmd == RETRO_ENVIRONMENT_GET_LOG_INTERFACE:
-            return False  # let core fall back to stderr
+            log.info("ENV GET_LOG_INTERFACE -> declined")
+            return False
+        log.info("ENV unhandled cmd=%d (0x%x), data=%s", cmd, cmd, data)
         return False
 
     def _video_callback(self, data: ctypes.c_void_p, width: int,
                         height: int, pitch: int):
+        if not hasattr(self, '_frame_count'):
+            self._frame_count = 0
+        self._frame_count += 1
+        if self._frame_count <= 3:
+            log.info("VIDEO frame #%d: data=%s width=%d height=%d pitch=%d fmt=%d",
+                     self._frame_count, data, width, height, pitch, self._pixel_fmt)
         if data and self.on_frame:
             # Convert to raw RGB24 bytes regardless of source pixel format
             raw = self._pixels_to_rgb24(data, width, height, pitch)
@@ -288,28 +299,60 @@ class LibretroCore:
     # Public API
     # ------------------------------------------------------------------
     def init(self):
+        # Query system info before init
+        sys_info = RetroSystemInfo()
+        self._lib.retro_get_system_info(ctypes.byref(sys_info))
+        log.info("Core system info: name=%s version=%s extensions=%s need_fullpath=%s",
+                 sys_info.library_name, sys_info.library_version,
+                 sys_info.valid_extensions, sys_info.need_fullpath)
+        self._need_fullpath = bool(sys_info.need_fullpath)
+
+        log.info("Calling retro_init()...")
         self._lib.retro_init()
-        log.info("libretro core initialised: %s", self.core_path.name)
+        log.info("retro_init() complete: %s (API version %d)",
+                 self.core_path.name, self._lib.retro_api_version())
 
     def load_game(self, rom_path: str) -> bool:
-        self._rom_path_buf = str(rom_path).encode()
-        rom_data   = Path(rom_path).read_bytes()
-        self._rom_buf = ctypes.create_string_buffer(rom_data)
+        rom_abs = str(Path(rom_path).resolve())
+        self._rom_path_buf = rom_abs.encode()
+        log.info("load_game: rom_path=%s (resolved=%s)", rom_path, rom_abs)
+        log.info("load_game: need_fullpath=%s", self._need_fullpath)
 
-        self._game_info       = RetroGameInfo()
-        self._game_info.path  = self._rom_path_buf
-        self._game_info.data  = ctypes.cast(self._rom_buf, ctypes.c_void_p)
-        self._game_info.size  = len(rom_data)
-        self._game_info.meta  = None
+        if self._need_fullpath:
+            # Core reads the file itself — don't pass data, just the path
+            self._rom_buf = None
+            self._game_info       = RetroGameInfo()
+            self._game_info.path  = self._rom_path_buf
+            self._game_info.data  = None
+            self._game_info.size  = 0
+            self._game_info.meta  = None
+            log.info("load_game: fullpath mode — passing path only")
+        else:
+            rom_data = Path(rom_path).read_bytes()
+            self._rom_buf = ctypes.create_string_buffer(rom_data)
+            self._game_info       = RetroGameInfo()
+            self._game_info.path  = self._rom_path_buf
+            self._game_info.data  = ctypes.cast(self._rom_buf, ctypes.c_void_p)
+            self._game_info.size  = len(rom_data)
+            self._game_info.meta  = None
+            log.info("load_game: buffered mode — %d bytes loaded into memory", len(rom_data))
 
+        log.info("load_game: calling retro_load_game()...")
         ok = self._lib.retro_load_game(ctypes.byref(self._game_info))
+        log.info("load_game: retro_load_game() returned %s", ok)
+
         if ok:
             self._av_info = RetroAvInfo()
             self._lib.retro_get_system_av_info(ctypes.byref(self._av_info))
-            log.info("ROM loaded. Size: %dx%d @ %.2fHz",
+            log.info("ROM loaded: %dx%d @ %.2fHz, sample_rate=%.0f",
                      self._av_info.geometry.base_width,
                      self._av_info.geometry.base_height,
-                     self._av_info.timing.fps)
+                     self._av_info.timing.fps,
+                     self._av_info.timing.sample_rate)
+            log.info("ROM geometry: max=%dx%d aspect=%.4f",
+                     self._av_info.geometry.max_width,
+                     self._av_info.geometry.max_height,
+                     self._av_info.geometry.aspect_ratio)
         else:
             log.error("Failed to load ROM: %s", rom_path)
         return ok

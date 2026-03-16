@@ -229,6 +229,10 @@ class GameSession:
         target_fps  = self._core.fps
         frame_time  = 1.0 / target_fps
         next_frame  = time.monotonic()
+        frame_num   = 0
+
+        log.info("[%s] Core loop starting: fps=%.2f frame_time=%.4fs",
+                 self.session_id, target_fps, frame_time)
 
         while self._running:
             # Apply merged inputs
@@ -236,7 +240,19 @@ class GameSession:
                 for player, buttons in self._inputs.items():
                     self._core.set_input(player, buttons)
 
-            self._core.run()
+            frame_num += 1
+            if frame_num <= 5:
+                log.info("[%s] Running frame #%d...", self.session_id, frame_num)
+
+            try:
+                self._core.run()
+            except Exception as e:
+                log.error("[%s] Exception on frame #%d: %s", self.session_id, frame_num, e)
+                self._running = False
+                break
+
+            if frame_num <= 5:
+                log.info("[%s] Frame #%d complete", self.session_id, frame_num)
 
             # Precise frame pacing
             next_frame += frame_time
