@@ -34,6 +34,9 @@ MANIFEST_PATH = CORES_DIR / ".manifest.json"
 # Timeout for individual HTTP requests
 REQUEST_TIMEOUT = aiohttp.ClientTimeout(total=120)
 
+# Headers that avoid Brotli (aiohttp may lack brotli support)
+_HEADERS = {"Accept-Encoding": "gzip, deflate"}
+
 
 def _load_manifest() -> dict:
     if MANIFEST_PATH.exists():
@@ -61,7 +64,7 @@ class CoreDownloader:
 
     async def list_remote_cores(self) -> list[dict]:
         """Scrape the buildbot index and return available cores."""
-        async with aiohttp.ClientSession(timeout=REQUEST_TIMEOUT) as session:
+        async with aiohttp.ClientSession(timeout=REQUEST_TIMEOUT, headers=_HEADERS) as session:
             async with session.get(f"{BUILDBOT_BASE}/") as resp:
                 resp.raise_for_status()
                 html = await resp.text()
@@ -118,7 +121,7 @@ class CoreDownloader:
 
         log.info("Downloading core: %s", url)
 
-        async with aiohttp.ClientSession(timeout=REQUEST_TIMEOUT) as session:
+        async with aiohttp.ClientSession(timeout=REQUEST_TIMEOUT, headers=_HEADERS) as session:
             async with session.get(url) as resp:
                 resp.raise_for_status()
                 data = await resp.read()
@@ -176,7 +179,7 @@ class CoreDownloader:
             return []
 
         updates = []
-        async with aiohttp.ClientSession(timeout=REQUEST_TIMEOUT) as session:
+        async with aiohttp.ClientSession(timeout=REQUEST_TIMEOUT, headers=_HEADERS) as session:
             for so_name in sorted(installed):
                 zip_name = f"{so_name}.zip"
                 url = f"{BUILDBOT_BASE}/{zip_name}"
