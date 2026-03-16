@@ -73,7 +73,8 @@ class CoreDownloader:
         pattern = re.compile(r'href="([^"]+_libretro\.so\.zip)"', re.IGNORECASE)
         cores = []
         for match in pattern.finditer(html):
-            filename = match.group(1)
+            # href may be a full path like /nightly/linux/x86_64/latest/foo.so.zip
+            filename = match.group(1).rsplit("/", 1)[-1]
             core_name = filename.replace("_libretro.so.zip", "")
             cores.append({
                 "name": core_name,
