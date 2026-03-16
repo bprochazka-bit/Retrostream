@@ -42,6 +42,9 @@ RETRO_ENVIRONMENT_SET_GEOMETRY                = 37
 RETRO_ENVIRONMENT_GET_CORE_OPTIONS_VERSION    = 52
 RETRO_ENVIRONMENT_SET_CORE_OPTIONS            = 53
 RETRO_ENVIRONMENT_SET_CORE_OPTIONS_V2_INTL    = 68
+RETRO_ENVIRONMENT_SET_HW_RENDER               = 14
+RETRO_ENVIRONMENT_GET_RUMBLE_INTERFACE        = 35
+RETRO_ENVIRONMENT_GET_HW_RENDER_INTERFACE     = 65
 
 RETRO_PIXEL_FORMAT_0RGB1555 = 0
 RETRO_PIXEL_FORMAT_XRGB8888 = 1
@@ -327,6 +330,18 @@ class LibretroCore:
                 ptr[0] = False
             log.info("ENV GET_OVERSCAN -> false")
             return True
+
+        if cmd == RETRO_ENVIRONMENT_SET_HW_RENDER:
+            log.warning("ENV SET_HW_RENDER -> declined (software rendering only)")
+            return False
+
+        if cmd == RETRO_ENVIRONMENT_GET_RUMBLE_INTERFACE:
+            log.info("ENV GET_RUMBLE_INTERFACE -> declined")
+            return False
+
+        if cmd == RETRO_ENVIRONMENT_GET_HW_RENDER_INTERFACE:
+            log.warning("ENV GET_HW_RENDER_INTERFACE -> declined (no GPU context)")
+            return False
 
         log.info("ENV unhandled cmd=%d (0x%x), data=%s", cmd, cmd, data)
         return False
