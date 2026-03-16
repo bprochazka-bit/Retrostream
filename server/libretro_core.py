@@ -153,7 +153,7 @@ EnvCallbackType    = ctypes.CFUNCTYPE(ctypes.c_bool, ctypes.c_uint, ctypes.c_voi
 VideoCallbackType  = ctypes.CFUNCTYPE(None, ctypes.c_void_p, ctypes.c_uint,
                                       ctypes.c_uint, ctypes.c_size_t)
 AudioSampleType    = ctypes.CFUNCTYPE(None, ctypes.c_int16, ctypes.c_int16)
-AudioCallbackType  = ctypes.CFUNCTYPE(None, ctypes.POINTER(ctypes.c_int16), ctypes.c_size_t)
+AudioCallbackType  = ctypes.CFUNCTYPE(ctypes.c_size_t, ctypes.POINTER(ctypes.c_int16), ctypes.c_size_t)
 InputPollType      = ctypes.CFUNCTYPE(None)
 InputStateType     = ctypes.CFUNCTYPE(ctypes.c_int16, ctypes.c_uint, ctypes.c_uint,
                                       ctypes.c_uint, ctypes.c_uint)

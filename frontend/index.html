@@ -1063,7 +1063,11 @@ async function connectWebRTC() {
 
   state.pc.onconnectionstatechange = () => {
     const s = state.pc.connectionState;
-    if (s === "connected")     { setStatus("connected"); state.connected = true; }
+    if (s === "connected") {
+      setStatus("connected");
+      state.connected = true;
+      renderPlayerSelector();
+    }
     if (s === "disconnected" ||
         s === "failed" ||
         s === "closed")        { setStatus("disconnected"); state.connected = false; }
@@ -1107,7 +1111,6 @@ async function connectWebRTC() {
 
   saveSessionState();
   updatePlayerList();
-  renderPlayerSelector();
 }
 
 function renderVideoToCanvas() {
