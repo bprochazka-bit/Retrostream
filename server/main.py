@@ -11,6 +11,12 @@ Routes:
     DELETE /api/sessions/{sid}      Destroy session
     GET  /api/status                Overall server status
 
+    GET    /api/cores/remote        List downloadable cores from buildbot
+    GET    /api/cores/installed     List locally installed cores
+    POST   /api/cores/download      Download a core
+    GET    /api/cores/updates       Check for core updates
+    DELETE /api/cores/{name}        Delete an installed core
+
     POST /rtc/offer/{sid}           WebRTC SDP offer → answer
 
     WS   /ws/input/{sid}            Input WebSocket (per client)
@@ -26,6 +32,8 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional
 
+import aiohttp
+
 from fastapi import (
     FastAPI, WebSocket, WebSocketDisconnect,
     HTTPException,
@@ -36,6 +44,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from .session_manager import session_manager
+from .core_downloader import core_downloader
 
 logging.basicConfig(
     level=logging.INFO,
@@ -129,6 +138,58 @@ async def delete_session(session_id: str):
 @app.get("/api/status")
 async def server_status():
     return session_manager.status()
+
+
+# ---------------------------------------------------------------------------
+# REST — core management
+# ---------------------------------------------------------------------------
+
+class DownloadCoreRequest(BaseModel):
+    core_name: str
+
+
+@app.get("/api/cores/remote")
+async def list_remote_cores():
+    try:
+        return await core_downloader.list_remote_cores()
+    except Exception as e:
+        log.exception("Failed to fetch remote core list")
+        raise HTTPException(status_code=502, detail=str(e))
+
+
+@app.get("/api/cores/installed")
+async def list_installed_cores():
+    return await core_downloader.list_installed_cores()
+
+
+@app.post("/api/cores/download", status_code=201)
+async def download_core(req: DownloadCoreRequest):
+    try:
+        result = await core_downloader.download_core(req.core_name)
+        return result
+    except aiohttp.ClientResponseError as e:
+        if e.status == 404:
+            raise HTTPException(status_code=404, detail=f"Core not found: {req.core_name}")
+        raise HTTPException(status_code=502, detail=str(e))
+    except Exception as e:
+        log.exception("Failed to download core")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/cores/updates")
+async def check_core_updates():
+    try:
+        return await core_downloader.check_updates()
+    except Exception as e:
+        log.exception("Failed to check for updates")
+        raise HTTPException(status_code=502, detail=str(e))
+
+
+@app.delete("/api/cores/{core_name}", status_code=204)
+async def delete_core(core_name: str):
+    deleted = await core_downloader.delete_core(core_name)
+    if not deleted:
+        raise HTTPException(status_code=404, detail=f"Core not found: {core_name}")
 
 
 # ---------------------------------------------------------------------------

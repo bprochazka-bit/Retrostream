@@ -282,6 +282,135 @@
     }
     .modal-box button:hover { background: #ff2d55; }
 
+    /* ── Core manager modal ── */
+    #core-modal {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.85);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+    }
+    #core-modal.hidden { display: none; }
+    .core-modal-box {
+      background: #1a1a2e;
+      border: 1px solid #0f3460;
+      border-radius: 8px;
+      padding: 24px;
+      width: 600px;
+      max-height: 80vh;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .core-modal-box h2 {
+      color: #e94560;
+      font-size: 1.1rem;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+    }
+    .core-tabs {
+      display: flex;
+      gap: 8px;
+    }
+    .core-tab {
+      background: #0d0d1a;
+      border: 1px solid #0f3460;
+      border-radius: 4px;
+      color: #888;
+      padding: 6px 14px;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 0.8rem;
+    }
+    .core-tab.active { border-color: #e94560; color: #e94560; }
+    #core-search {
+      width: 100%;
+      background: #0d0d1a;
+      border: 1px solid #0f3460;
+      border-radius: 4px;
+      color: #e0e0e0;
+      padding: 8px 10px;
+      font-family: inherit;
+      font-size: 0.85rem;
+      outline: none;
+    }
+    #core-search:focus { border-color: #e94560; }
+    #core-list {
+      flex: 1;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      max-height: 50vh;
+      scrollbar-width: thin;
+      scrollbar-color: #333 transparent;
+    }
+    .core-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 10px;
+      background: #0d0d1a;
+      border-radius: 4px;
+      font-size: 0.8rem;
+    }
+    .core-row .core-name { flex: 1; color: #e0e0e0; }
+    .core-row .core-status {
+      font-size: 0.7rem;
+      color: #555;
+    }
+    .core-row .core-status.installed { color: #00ff88; }
+    .core-row .core-status.update { color: #ffa500; }
+    .core-row button {
+      background: #16213e;
+      border: 1px solid #0f3460;
+      border-radius: 4px;
+      color: #aaa;
+      padding: 4px 10px;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 0.75rem;
+    }
+    .core-row button:hover { border-color: #e94560; color: #e94560; }
+    .core-row button.downloading {
+      border-color: #ffa500;
+      color: #ffa500;
+      cursor: wait;
+    }
+    .core-row button.delete-btn:hover { border-color: #ff4444; color: #ff4444; }
+    #core-modal-status {
+      font-size: 0.75rem;
+      color: #555;
+      min-height: 1.2em;
+    }
+    .core-close-btn {
+      background: none;
+      border: 1px solid #333;
+      border-radius: 4px;
+      color: #888;
+      padding: 6px 14px;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 0.8rem;
+      align-self: flex-end;
+    }
+    .core-close-btn:hover { border-color: #e94560; color: #e94560; }
+    #cores-btn {
+      background: #16213e;
+      border: 1px solid #0f3460;
+      border-radius: 4px;
+      color: #a0a0c0;
+      padding: 5px 12px;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 0.75rem;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+    #cores-btn:hover { border-color: #e94560; color: #e94560; }
+
     /* ── Controls hint ── */
     #controls-hint {
       padding: 6px 12px;
@@ -325,6 +454,22 @@
 </head>
 <body>
 
+<!-- Core manager modal -->
+<div id="core-modal" class="hidden">
+  <div class="core-modal-box">
+    <h2>Core Manager</h2>
+    <div class="core-tabs">
+      <button class="core-tab active" data-tab="available">Available</button>
+      <button class="core-tab" data-tab="installed">Installed</button>
+      <button class="core-tab" data-tab="updates">Updates</button>
+    </div>
+    <input id="core-search" type="text" placeholder="Search cores..." />
+    <div id="core-list"></div>
+    <div id="core-modal-status"></div>
+    <button class="core-close-btn" id="core-close-btn">Close</button>
+  </div>
+</div>
+
 <!-- Join modal -->
 <div id="join-modal">
   <div class="modal-box">
@@ -364,6 +509,7 @@
 <header>
   <h1>RetroStream</h1>
   <div id="session-badge">No session</div>
+  <button id="cores-btn">Cores</button>
   <div id="connection-status" class="disconnected">Disconnected</div>
 </header>
 
@@ -841,6 +987,204 @@ function escHtml(s) {
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;");
+}
+
+// ============================================================
+// Core Manager
+// ============================================================
+
+const coreState = {
+  tab: "available",
+  remoteCores: [],
+  installedCores: [],
+  updates: [],
+  loading: false,
+};
+
+function getCoreServerUrl() {
+  return ($("server-url").value || "http://localhost:8000").replace(/\/$/, "");
+}
+
+$("cores-btn").addEventListener("click", () => {
+  $("core-modal").classList.remove("hidden");
+  switchCoreTab("available");
+});
+
+$("core-close-btn").addEventListener("click", () => {
+  $("core-modal").classList.add("hidden");
+});
+
+// Tab switching
+document.querySelectorAll(".core-tab").forEach(btn => {
+  btn.addEventListener("click", () => switchCoreTab(btn.dataset.tab));
+});
+
+function switchCoreTab(tab) {
+  coreState.tab = tab;
+  document.querySelectorAll(".core-tab").forEach(b => {
+    b.classList.toggle("active", b.dataset.tab === tab);
+  });
+  $("core-search").value = "";
+  loadCoreTab();
+}
+
+async function loadCoreTab() {
+  const list = $("core-list");
+  const status = $("core-modal-status");
+  list.innerHTML = '<div style="color:#555;padding:12px;">Loading...</div>';
+  status.textContent = "";
+
+  const base = getCoreServerUrl();
+
+  try {
+    if (coreState.tab === "available") {
+      // Fetch both remote and installed to show status
+      const [remoteRes, installedRes] = await Promise.all([
+        fetch(`${base}/api/cores/remote`),
+        fetch(`${base}/api/cores/installed`),
+      ]);
+      coreState.remoteCores = await remoteRes.json();
+      coreState.installedCores = await installedRes.json();
+      status.textContent = `${coreState.remoteCores.length} cores available`;
+      renderCoreList();
+    } else if (coreState.tab === "installed") {
+      const res = await fetch(`${base}/api/cores/installed`);
+      coreState.installedCores = await res.json();
+      status.textContent = `${coreState.installedCores.length} cores installed`;
+      renderCoreList();
+    } else if (coreState.tab === "updates") {
+      status.textContent = "Checking for updates...";
+      const res = await fetch(`${base}/api/cores/updates`);
+      coreState.updates = await res.json();
+      status.textContent = coreState.updates.length
+        ? `${coreState.updates.length} update(s) available`
+        : "All cores are up to date";
+      renderCoreList();
+    }
+  } catch (err) {
+    list.innerHTML = `<div style="color:#e94560;padding:12px;">Failed to load: ${escHtml(err.message)}</div>`;
+  }
+}
+
+$("core-search").addEventListener("input", () => renderCoreList());
+
+function renderCoreList() {
+  const list = $("core-list");
+  const filter = $("core-search").value.toLowerCase();
+  list.innerHTML = "";
+
+  let items = [];
+  const installedNames = new Set(coreState.installedCores.map(c => c.name));
+
+  if (coreState.tab === "available") {
+    items = coreState.remoteCores.map(c => ({
+      name: c.name,
+      installed: installedNames.has(c.name),
+      hasUpdate: false,
+    }));
+  } else if (coreState.tab === "installed") {
+    items = coreState.installedCores.map(c => ({
+      name: c.name,
+      filename: c.filename,
+      installed: true,
+      size: c.size_bytes,
+      installedAt: c.installed_at,
+      hasUpdate: false,
+    }));
+  } else if (coreState.tab === "updates") {
+    items = coreState.updates.map(c => ({
+      name: c.name,
+      installed: true,
+      hasUpdate: true,
+      remoteDate: c.remote_date,
+    }));
+  }
+
+  if (filter) {
+    items = items.filter(c => c.name.toLowerCase().includes(filter));
+  }
+
+  if (items.length === 0) {
+    list.innerHTML = '<div style="color:#555;padding:12px;font-style:italic;">No cores found</div>';
+    return;
+  }
+
+  for (const core of items) {
+    const row = document.createElement("div");
+    row.className = "core-row";
+
+    let statusHtml = "";
+    let actionsHtml = "";
+
+    if (coreState.tab === "available") {
+      if (core.installed) {
+        statusHtml = '<span class="core-status installed">Installed</span>';
+        actionsHtml = `<button onclick="coreAction('download','${escHtml(core.name)}',this)">Reinstall</button>`;
+      } else {
+        actionsHtml = `<button onclick="coreAction('download','${escHtml(core.name)}',this)">Download</button>`;
+      }
+    } else if (coreState.tab === "installed") {
+      const sizeKb = core.size ? (core.size / 1024).toFixed(0) + " KB" : "";
+      statusHtml = `<span class="core-status">${sizeKb}</span>`;
+      actionsHtml = `
+        <button onclick="coreAction('download','${escHtml(core.name)}',this)">Update</button>
+        <button class="delete-btn" onclick="coreAction('delete','${escHtml(core.name)}',this)">Delete</button>
+      `;
+    } else if (coreState.tab === "updates") {
+      statusHtml = '<span class="core-status update">Update available</span>';
+      actionsHtml = `<button onclick="coreAction('download','${escHtml(core.name)}',this)">Update</button>`;
+    }
+
+    row.innerHTML = `
+      <span class="core-name">${escHtml(core.name)}</span>
+      ${statusHtml}
+      ${actionsHtml}
+    `;
+    list.appendChild(row);
+  }
+}
+
+async function coreAction(action, name, btn) {
+  const base = getCoreServerUrl();
+  const origText = btn.textContent;
+  btn.textContent = action === "delete" ? "Deleting..." : "Downloading...";
+  btn.classList.add("downloading");
+  btn.disabled = true;
+  const status = $("core-modal-status");
+
+  try {
+    if (action === "download") {
+      status.textContent = `Downloading ${name}...`;
+      const res = await fetch(`${base}/api/cores/download`, {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({ core_name: name }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.detail || `HTTP ${res.status}`);
+      }
+      const data = await res.json();
+      status.textContent = `Installed ${data.filename} (${(data.size_bytes/1024).toFixed(0)} KB)`;
+      btn.textContent = "Done!";
+      setTimeout(() => loadCoreTab(), 1000);
+    } else if (action === "delete") {
+      const res = await fetch(`${base}/api/cores/${encodeURIComponent(name)}`, {
+        method: "DELETE",
+      });
+      if (!res.ok && res.status !== 204) {
+        const err = await res.json();
+        throw new Error(err.detail || `HTTP ${res.status}`);
+      }
+      status.textContent = `Deleted ${name}`;
+      setTimeout(() => loadCoreTab(), 500);
+    }
+  } catch (err) {
+    status.textContent = `Error: ${err.message}`;
+    btn.textContent = origText;
+    btn.classList.remove("downloading");
+    btn.disabled = false;
+  }
 }
 </script>
 </body>
