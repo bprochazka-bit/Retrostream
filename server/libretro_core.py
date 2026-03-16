@@ -119,6 +119,33 @@ class RetroVariable(ctypes.Structure):
         ("value", ctypes.c_char_p),
     ]
 
+# HW render context types
+RETRO_HW_CONTEXT_OPENGL      = 1
+RETRO_HW_CONTEXT_OPENGLES2   = 2
+RETRO_HW_CONTEXT_OPENGL_CORE = 3
+RETRO_HW_CONTEXT_OPENGLES3   = 4
+
+# Function pointer types for hw render callback
+HWGetCurrentFramebuffer = ctypes.CFUNCTYPE(ctypes.c_ulong)
+HWGetProcAddress        = ctypes.CFUNCTYPE(ctypes.c_void_p, ctypes.c_char_p)
+HWContextReset          = ctypes.CFUNCTYPE(None)
+
+class RetroHWRenderCallback(ctypes.Structure):
+    _fields_ = [
+        ("context_type",          ctypes.c_uint),
+        ("context_reset",         HWContextReset),
+        ("get_current_framebuffer", HWGetCurrentFramebuffer),
+        ("get_proc_address",      HWGetProcAddress),
+        ("depth",                 ctypes.c_bool),
+        ("stencil",               ctypes.c_bool),
+        ("bottom_left_origin",    ctypes.c_bool),
+        ("version_major",         ctypes.c_uint),
+        ("version_minor",         ctypes.c_uint),
+        ("cache_context",         ctypes.c_bool),
+        ("context_destroy",       HWContextReset),
+        ("debug_context",         ctypes.c_bool),
+    ]
+
 # ---------------------------------------------------------------------------
 # Callback typedefs
 # ---------------------------------------------------------------------------
@@ -178,6 +205,19 @@ class LibretroCore:
         self._rom_buf  = None
         self._rom_path_buf = None
         self._game_info = None
+
+        # HW render state
+        self._hw_render: Optional[ctypes.POINTER(RetroHWRenderCallback)] = None
+        self._egl_display = None
+        self._egl_context = None
+        self._egl_surface = None
+        self._gl_fbo = 0
+        self._egl_lib = None
+        self._gl_lib = None
+        # Keep references to ctypes function pointers for hw render
+        self._hw_get_framebuffer = None
+        self._hw_get_proc_address = None
+
         self._bind_functions()
         self._install_callbacks()
 
@@ -256,37 +296,38 @@ class LibretroCore:
 
         if cmd == RETRO_ENVIRONMENT_GET_CAN_DUPE:
             # Tell core we support frame duplication (NULL video data = repeat last frame)
-            ptr = ctypes.cast(data, ctypes.POINTER(ctypes.c_bool))
-            ptr[0] = True
+            if data:
+                ctypes.c_bool.from_address(data).value = True
             log.info("ENV GET_CAN_DUPE -> true")
             return True
 
         if cmd == RETRO_ENVIRONMENT_GET_SYSTEM_DIRECTORY:
-            ptr = ctypes.cast(data, ctypes.POINTER(ctypes.c_char_p))
-            ptr[0] = self.system_dir
+            # data is a const char** — write our string pointer into it
+            ctypes.c_char_p.from_address(data).value = self.system_dir
             log.info("ENV GET_SYSTEM_DIRECTORY -> %s", self.system_dir)
             return True
 
         if cmd == RETRO_ENVIRONMENT_GET_SAVE_DIRECTORY:
-            ptr = ctypes.cast(data, ctypes.POINTER(ctypes.c_char_p))
-            ptr[0] = self.save_dir
+            ctypes.c_char_p.from_address(data).value = self.save_dir
             log.info("ENV GET_SAVE_DIRECTORY -> %s", self.save_dir)
             return True
 
         if cmd == RETRO_ENVIRONMENT_GET_VARIABLE:
-            # Core is requesting a variable value — return NULL (no override)
+            # Core is requesting a variable value — set value to NULL
+            # The struct has: { const char *key; const char *value; }
+            # We must write a NULL pointer into the value field (offset = sizeof(char*))
             if data:
-                var = ctypes.cast(data, ctypes.POINTER(RetroVariable))
-                key = var[0].key
-                log.info("ENV GET_VARIABLE: key=%s -> None", key)
-                var[0].value = None
-            return True
+                ptr_size = ctypes.sizeof(ctypes.c_char_p)
+                key_ptr = ctypes.c_char_p.from_address(data)
+                log.info("ENV GET_VARIABLE: key=%s -> NULL", key_ptr.value)
+                # Write NULL to the value field at offset ptr_size
+                ctypes.c_char_p.from_address(data + ptr_size).value = None
+            return False  # return false = variable not set
 
         if cmd == RETRO_ENVIRONMENT_GET_VARIABLE_UPDATE:
             # "Have variables been updated?" — no
             if data:
-                ptr = ctypes.cast(data, ctypes.POINTER(ctypes.c_bool))
-                ptr[0] = False
+                ctypes.c_bool.from_address(data).value = False
             return True
 
         if cmd == RETRO_ENVIRONMENT_SET_VARIABLES:
@@ -303,8 +344,8 @@ class LibretroCore:
 
         if cmd == RETRO_ENVIRONMENT_GET_CORE_OPTIONS_VERSION:
             # Tell core we support options v0 (basic)
-            ptr = ctypes.cast(data, ctypes.POINTER(ctypes.c_uint))
-            ptr[0] = 0
+            if data:
+                ctypes.c_uint.from_address(data).value = 0
             log.info("ENV GET_CORE_OPTIONS_VERSION -> 0")
             return True
 
@@ -326,21 +367,40 @@ class LibretroCore:
 
         if cmd == RETRO_ENVIRONMENT_GET_OVERSCAN:
             if data:
-                ptr = ctypes.cast(data, ctypes.POINTER(ctypes.c_bool))
-                ptr[0] = False
+                ctypes.c_bool.from_address(data).value = False
             log.info("ENV GET_OVERSCAN -> false")
             return True
 
         if cmd == RETRO_ENVIRONMENT_SET_HW_RENDER:
-            log.warning("ENV SET_HW_RENDER -> declined (software rendering only)")
-            return False
+            hw = ctypes.cast(data, ctypes.POINTER(RetroHWRenderCallback))
+            ctx_type = hw[0].context_type
+            ver_maj  = hw[0].version_major
+            ver_min  = hw[0].version_minor
+            log.info("ENV SET_HW_RENDER: type=%d major=%d minor=%d depth=%s stencil=%s",
+                     ctx_type, ver_maj, ver_min, hw[0].depth, hw[0].stencil)
+
+            try:
+                self._setup_egl_context(ctx_type, ver_maj, ver_min)
+            except Exception as e:
+                log.error("Failed to create EGL context: %s", e)
+                return False
+
+            # Install our callbacks into the struct the core gave us
+            self._hw_get_framebuffer = HWGetCurrentFramebuffer(self._get_hw_framebuffer)
+            self._hw_get_proc_address = HWGetProcAddress(self._get_hw_proc_address)
+            hw[0].get_current_framebuffer = self._hw_get_framebuffer
+            hw[0].get_proc_address = self._hw_get_proc_address
+
+            self._hw_render = hw
+            log.info("ENV SET_HW_RENDER -> accepted (EGL headless)")
+            return True
 
         if cmd == RETRO_ENVIRONMENT_GET_RUMBLE_INTERFACE:
             log.info("ENV GET_RUMBLE_INTERFACE -> declined")
             return False
 
         if cmd == RETRO_ENVIRONMENT_GET_HW_RENDER_INTERFACE:
-            log.warning("ENV GET_HW_RENDER_INTERFACE -> declined (no GPU context)")
+            log.info("ENV GET_HW_RENDER_INTERFACE -> declined (not needed for basic GL)")
             return False
 
         log.info("ENV unhandled cmd=%d (0x%x), data=%s", cmd, cmd, data)
@@ -378,6 +438,170 @@ class LibretroCore:
         if device == RETRO_DEVICE_JOYPAD:
             return self._input.get_button(port, button_id)
         return 0
+
+    # ------------------------------------------------------------------
+    # HW render — headless EGL context
+    # ------------------------------------------------------------------
+
+    def _setup_egl_context(self, ctx_type: int, ver_major: int, ver_minor: int):
+        """Create a headless EGL + OpenGL/ES context for HW-rendered cores."""
+        self._egl_lib = ctypes.CDLL("libEGL.so.1")
+        self._gl_lib  = ctypes.CDLL("libGL.so.1")
+
+        EGL_DEFAULT_DISPLAY       = ctypes.c_void_p(0)
+        EGL_NO_CONTEXT            = ctypes.c_void_p(0)
+        EGL_NO_SURFACE            = ctypes.c_void_p(0)
+        EGL_OPENGL_API            = 0x30A2
+        EGL_OPENGL_ES_API         = 0x30A0
+        EGL_NONE                  = 0x3038
+        EGL_RENDERABLE_TYPE       = 0x3040
+        EGL_OPENGL_BIT            = 0x0008
+        EGL_OPENGL_ES2_BIT        = 0x0004
+        EGL_OPENGL_ES3_BIT        = 0x0040
+        EGL_SURFACE_TYPE          = 0x3033
+        EGL_PBUFFER_BIT           = 0x0001
+        EGL_WIDTH                 = 0x3057
+        EGL_HEIGHT                = 0x3056
+        EGL_CONTEXT_MAJOR_VERSION = 0x3098
+        EGL_CONTEXT_MINOR_VERSION = 0x30FB
+
+        egl = self._egl_lib
+        egl.eglGetDisplay.restype  = ctypes.c_void_p
+        egl.eglInitialize.restype  = ctypes.c_bool
+        egl.eglChooseConfig.restype = ctypes.c_bool
+        egl.eglBindAPI.restype     = ctypes.c_bool
+        egl.eglCreateContext.restype = ctypes.c_void_p
+        egl.eglCreatePbufferSurface.restype = ctypes.c_void_p
+        egl.eglMakeCurrent.restype = ctypes.c_bool
+        egl.eglGetProcAddress.restype = ctypes.c_void_p
+        egl.eglGetProcAddress.argtypes = [ctypes.c_char_p]
+
+        # Get display
+        display = egl.eglGetDisplay(EGL_DEFAULT_DISPLAY)
+        if not display:
+            raise RuntimeError("eglGetDisplay failed")
+        self._egl_display = display
+
+        major, minor = ctypes.c_int(), ctypes.c_int()
+        if not egl.eglInitialize(display, ctypes.byref(major), ctypes.byref(minor)):
+            raise RuntimeError("eglInitialize failed")
+        log.info("EGL initialized: %d.%d", major.value, minor.value)
+
+        # Determine API and renderable type
+        use_es = ctx_type in (RETRO_HW_CONTEXT_OPENGLES2, RETRO_HW_CONTEXT_OPENGLES3)
+        if use_es:
+            egl.eglBindAPI(EGL_OPENGL_ES_API)
+            renderable = EGL_OPENGL_ES3_BIT if ctx_type == RETRO_HW_CONTEXT_OPENGLES3 else EGL_OPENGL_ES2_BIT
+        else:
+            egl.eglBindAPI(EGL_OPENGL_API)
+            renderable = EGL_OPENGL_BIT
+
+        # Choose config
+        config_attribs = (ctypes.c_int * 7)(
+            EGL_SURFACE_TYPE, EGL_PBUFFER_BIT,
+            EGL_RENDERABLE_TYPE, renderable,
+            EGL_NONE, 0, 0,
+        )
+        config = ctypes.c_void_p()
+        num_configs = ctypes.c_int()
+        if not egl.eglChooseConfig(display, config_attribs,
+                                    ctypes.byref(config), 1,
+                                    ctypes.byref(num_configs)):
+            raise RuntimeError("eglChooseConfig failed")
+        if num_configs.value == 0:
+            raise RuntimeError("No matching EGL config found")
+        log.info("EGL config chosen (num_configs=%d)", num_configs.value)
+
+        # Create pbuffer surface (1x1 — the core uses FBOs for real rendering)
+        surface_attribs = (ctypes.c_int * 5)(
+            EGL_WIDTH, 1,
+            EGL_HEIGHT, 1,
+            EGL_NONE,
+        )
+        surface = egl.eglCreatePbufferSurface(display, config, surface_attribs)
+        if not surface:
+            raise RuntimeError("eglCreatePbufferSurface failed")
+        self._egl_surface = surface
+
+        # Create context with requested version
+        gl_major = ver_major if ver_major > 0 else (3 if ctx_type == RETRO_HW_CONTEXT_OPENGL_CORE else 2)
+        gl_minor = ver_minor
+        ctx_attribs = (ctypes.c_int * 5)(
+            EGL_CONTEXT_MAJOR_VERSION, gl_major,
+            EGL_CONTEXT_MINOR_VERSION, gl_minor,
+            EGL_NONE,
+        )
+        context = egl.eglCreateContext(display, config, EGL_NO_CONTEXT, ctx_attribs)
+        if not context:
+            raise RuntimeError(f"eglCreateContext failed (GL {gl_major}.{gl_minor})")
+        self._egl_context = context
+
+        # Make current
+        if not egl.eglMakeCurrent(display, surface, surface, context):
+            raise RuntimeError("eglMakeCurrent failed")
+
+        log.info("EGL context created: GL %d.%d (es=%s)", gl_major, gl_minor, use_es)
+
+    def _call_hw_context_reset(self):
+        """Call the core's context_reset after EGL context is ready."""
+        if self._hw_render and self._hw_render[0].context_reset:
+            log.info("Calling core's context_reset callback...")
+            self._hw_render[0].context_reset()
+            log.info("context_reset complete")
+
+    def _get_hw_framebuffer(self) -> int:
+        return 0  # default FBO (the pbuffer)
+
+    def _get_hw_proc_address(self, sym: bytes) -> ctypes.c_void_p:
+        if self._egl_lib:
+            addr = self._egl_lib.eglGetProcAddress(sym)
+            if addr:
+                return addr
+        if self._gl_lib:
+            try:
+                return ctypes.cast(
+                    getattr(self._gl_lib, sym.decode()), ctypes.c_void_p
+                ).value
+            except AttributeError:
+                pass
+        return None
+
+    def _make_hw_current(self):
+        """Ensure our EGL context is current (call before retro_run for HW cores)."""
+        if self._egl_display and self._egl_context:
+            self._egl_lib.eglMakeCurrent(
+                self._egl_display, self._egl_surface,
+                self._egl_surface, self._egl_context
+            )
+
+    def _read_hw_framebuffer(self, width: int, height: int) -> Optional[bytes]:
+        """Read pixels from the GL framebuffer after a HW-rendered frame."""
+        if not self._gl_lib:
+            return None
+        GL_RGB = 0x1907
+        GL_UNSIGNED_BYTE = 0x1401
+        buf = ctypes.create_string_buffer(width * height * 3)
+        self._gl_lib.glReadPixels(0, 0, width, height, GL_RGB, GL_UNSIGNED_BYTE, buf)
+        return bytes(buf)
+
+    def _teardown_egl(self):
+        """Clean up EGL resources."""
+        if self._egl_lib and self._egl_display:
+            try:
+                if self._hw_render and self._hw_render[0].context_destroy:
+                    self._hw_render[0].context_destroy()
+            except Exception:
+                pass
+            self._egl_lib.eglMakeCurrent(
+                self._egl_display,
+                ctypes.c_void_p(0), ctypes.c_void_p(0), ctypes.c_void_p(0)
+            )
+            if self._egl_context:
+                self._egl_lib.eglDestroyContext(self._egl_display, self._egl_context)
+            if self._egl_surface:
+                self._egl_lib.eglDestroySurface(self._egl_display, self._egl_surface)
+            self._egl_lib.eglTerminate(self._egl_display)
+            log.info("EGL context destroyed")
 
     # ------------------------------------------------------------------
     # Pixel format conversion
