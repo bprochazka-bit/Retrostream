@@ -476,7 +476,7 @@
     <h2>RetroStream</h2>
     <div>
       <label>Server URL</label>
-      <input id="server-url" type="text" value="http://localhost:8000" />
+      <input id="server-url" type="text" />
     </div>
     <div>
       <label>Session ID</label>
@@ -596,7 +596,7 @@ const KEY_MAP = {
 
 // ── State ──
 let state = {
-  serverUrl:   "http://localhost:8000",
+  serverUrl:   window.location.origin,
   sessionId:   null,
   clientId:    null,
   playerNum:   null,
@@ -619,6 +619,7 @@ let state = {
 
 // ── DOM refs ──
 const $ = id => document.getElementById(id);
+$("server-url").value = window.location.origin;
 const video        = $("game-video");
 const canvas       = $("game-canvas");
 const ctx          = canvas.getContext("2d");
@@ -1036,7 +1037,7 @@ let _loadedRoms = [];
 let _loadedCores = [];
 
 async function populateDropdowns() {
-  const base = ($("server-url").value || "http://localhost:8000").replace(/\/$/, "");
+  const base = ($("server-url").value || window.location.origin).replace(/\/$/, "");
   try {
     const [roms, cores] = await Promise.all([
       fetch(`${base}/api/roms`).then(r => r.json()),
@@ -1127,7 +1128,7 @@ const coreState = {
 };
 
 function getCoreServerUrl() {
-  return ($("server-url").value || "http://localhost:8000").replace(/\/$/, "");
+  return ($("server-url").value || window.location.origin).replace(/\/$/, "");
 }
 
 $("cores-btn").addEventListener("click", () => {

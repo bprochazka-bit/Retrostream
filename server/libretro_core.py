@@ -158,6 +158,11 @@ class LibretroCore:
         self.on_audio: Optional[Callable[[bytes], None]]           = None
 
         self._av_info: Optional[RetroAvInfo] = None
+
+        # Prevent GC of buffers the core holds pointers to
+        self._rom_buf  = None
+        self._rom_path_buf = None
+        self._game_info = None
         self._bind_functions()
         self._install_callbacks()
 
@@ -287,17 +292,17 @@ class LibretroCore:
         log.info("libretro core initialised: %s", self.core_path.name)
 
     def load_game(self, rom_path: str) -> bool:
-        path_bytes = str(rom_path).encode()
+        self._rom_path_buf = str(rom_path).encode()
         rom_data   = Path(rom_path).read_bytes()
-        buf        = ctypes.create_string_buffer(rom_data)
+        self._rom_buf = ctypes.create_string_buffer(rom_data)
 
-        info       = RetroGameInfo()
-        info.path  = path_bytes
-        info.data  = ctypes.cast(buf, ctypes.c_void_p)
-        info.size  = len(rom_data)
-        info.meta  = None
+        self._game_info       = RetroGameInfo()
+        self._game_info.path  = self._rom_path_buf
+        self._game_info.data  = ctypes.cast(self._rom_buf, ctypes.c_void_p)
+        self._game_info.size  = len(rom_data)
+        self._game_info.meta  = None
 
-        ok = self._lib.retro_load_game(ctypes.byref(info))
+        ok = self._lib.retro_load_game(ctypes.byref(self._game_info))
         if ok:
             self._av_info = RetroAvInfo()
             self._lib.retro_get_system_av_info(ctypes.byref(self._av_info))
