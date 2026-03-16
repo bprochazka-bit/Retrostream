@@ -167,9 +167,14 @@ class LibretroAudioTrack(AudioStreamTrack):
         self._time_base   = fractions.Fraction(1, sample_rate)
         self._queue: asyncio.Queue = asyncio.Queue(maxsize=32)
         self._stopped = False
+        self._recv_count = 0
+        self._push_count = 0
 
     def push_audio(self, pcm: bytes):
         """Called from core thread. pcm is interleaved int16 stereo."""
+        self._push_count += 1
+        if self._push_count <= 5:
+            log.info("AudioTrack: push_audio #%d, %d bytes", self._push_count, len(pcm))
         try:
             self._loop.call_soon_threadsafe(self._queue_put, pcm)
         except RuntimeError:
@@ -191,6 +196,10 @@ class LibretroAudioTrack(AudioStreamTrack):
 
     async def recv(self):
         """Called by aiortc to get the next audio frame."""
+        self._recv_count += 1
+        if self._recv_count <= 5:
+            log.info("AudioTrack: recv() called #%d, queue size=%d",
+                     self._recv_count, self._queue.qsize())
         try:
             pcm = await asyncio.wait_for(self._queue.get(), timeout=1.0)
         except asyncio.TimeoutError:
@@ -454,6 +463,15 @@ class GameSession:
         await pc.setRemoteDescription(offer)
         answer = await pc.createAnswer()
         await pc.setLocalDescription(answer)
+
+        # Log SDP details for debugging
+        answer_sdp = pc.localDescription.sdp
+        audio_lines = [l for l in answer_sdp.split('\n') if 'audio' in l.lower() or 'm=audio' in l]
+        video_lines = [l for l in answer_sdp.split('\n') if 'm=video' in l]
+        log.info("[%s] SDP answer: %d video m-lines, %d audio m-lines",
+                 self.session_id, len(video_lines), len(audio_lines))
+        for line in audio_lines:
+            log.info("[%s] SDP audio: %s", self.session_id, line.strip())
 
         log.info("[%s] Client %s joined as %s (player %s)",
                  self.session_id, client_id, role, player_num)
