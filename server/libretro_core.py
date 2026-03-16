@@ -392,32 +392,17 @@ class LibretroCore:
             ctx_type = hw[0].context_type
             ver_maj  = hw[0].version_major
             ver_min  = hw[0].version_minor
-            log.info("ENV SET_HW_RENDER: type=%d major=%d minor=%d depth=%s stencil=%s",
-                     ctx_type, ver_maj, ver_min, hw[0].depth, hw[0].stencil)
-
-            try:
-                self._setup_egl_context(ctx_type, ver_maj, ver_min)
-            except Exception as e:
-                log.error("Failed to create EGL context: %s", e)
-                return False
-
-            # Install our callbacks into the struct the core gave us
-            self._hw_get_framebuffer = HWGetCurrentFramebuffer(self._get_hw_framebuffer)
-            self._hw_get_proc_address = HWGetProcAddress(self._get_hw_proc_address)
-            hw[0].get_current_framebuffer = self._hw_get_framebuffer
-            hw[0].get_proc_address = self._hw_get_proc_address
-
-            self._hw_render = hw
-            log.info("ENV SET_HW_RENDER -> accepted (EGL headless)")
-            return True
+            log.warning("ENV SET_HW_RENDER: type=%d major=%d minor=%d — "
+                        "core requires GPU rendering", ctx_type, ver_maj, ver_min)
+            self._hw_render_requested = True
+            return False
 
         if cmd == RETRO_ENVIRONMENT_GET_RUMBLE_INTERFACE:
             log.info("ENV GET_RUMBLE_INTERFACE -> declined")
             return False
 
         if cmd == RETRO_ENVIRONMENT_GET_HW_RENDER_INTERFACE:
-            log.warning("ENV GET_HW_RENDER_INTERFACE -> declined (headless, no GPU context)")
-            self._hw_render_requested = True
+            log.info("ENV GET_HW_RENDER_INTERFACE -> declined (no GPU context)")
             return False
 
         log.info("ENV unhandled cmd=%d (0x%x), data=%s", cmd, cmd, data)
