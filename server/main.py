@@ -144,6 +144,31 @@ async def server_status():
     return session_manager.status()
 
 
+@app.post("/api/sessions/{session_id}/reset", status_code=200)
+async def reset_session(session_id: str):
+    session = session_manager.get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    session.reset_game()
+    return {"status": "ok"}
+
+
+class SetPlayerRequest(BaseModel):
+    client_id: str
+    player_num: int
+
+
+@app.post("/api/sessions/{session_id}/player", status_code=200)
+async def set_player_num(session_id: str, req: SetPlayerRequest):
+    session = session_manager.get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    ok = session.set_player_num(req.client_id, req.player_num)
+    if not ok:
+        raise HTTPException(status_code=409, detail="Player slot unavailable")
+    return {"status": "ok", "player_num": req.player_num}
+
+
 # ---------------------------------------------------------------------------
 # REST — core management
 # ---------------------------------------------------------------------------

@@ -206,6 +206,9 @@ class LibretroCore:
         self._rom_path_buf = None
         self._game_info = None
 
+        # Audio single-sample buffer (for cores that use retro_audio_sample)
+        self._audio_sample_buf = bytearray()
+
         # HW render state
         self._hw_render: Optional[ctypes.POINTER(RetroHWRenderCallback)] = None
         self._hw_render_requested = False
@@ -422,10 +425,21 @@ class LibretroCore:
             self.on_frame(raw, width, height)
 
     def _audio_sample_callback(self, left: int, right: int):
-        pass  # single-sample callback — most cores use the batch version
+        """Single-sample audio callback — buffer and flush in batches."""
+        import struct
+        self._audio_sample_buf += struct.pack('<hh', left, right)
+        # Flush every ~128 samples (small enough for low latency)
+        if len(self._audio_sample_buf) >= 128 * 4:
+            if self.on_audio:
+                self.on_audio(bytes(self._audio_sample_buf))
+            self._audio_sample_buf.clear()
 
     def _audio_callback(self, data: ctypes.POINTER(ctypes.c_int16),
                         frames: int) -> int:
+        # Flush any buffered single-samples first
+        if self._audio_sample_buf and self.on_audio:
+            self.on_audio(bytes(self._audio_sample_buf))
+            self._audio_sample_buf.clear()
         if self.on_audio:
             size  = frames * 2 * ctypes.sizeof(ctypes.c_int16)
             raw   = ctypes.string_at(data, size)
@@ -704,6 +718,10 @@ class LibretroCore:
     def run(self):
         """Advance one frame. Triggers video/audio callbacks."""
         self._lib.retro_run()
+        # Flush any remaining single-sample audio from this frame
+        if self._audio_sample_buf and self.on_audio:
+            self.on_audio(bytes(self._audio_sample_buf))
+            self._audio_sample_buf.clear()
 
     def reset(self):
         self._lib.retro_reset()

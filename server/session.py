@@ -484,6 +484,12 @@ class GameSession:
     # Input handling
     # ------------------------------------------------------------------
 
+    def reset_game(self):
+        """Reset the running game (like pressing the reset button on a console)."""
+        if self._core:
+            self._core.reset()
+            log.info("[%s] Game reset", self.session_id)
+
     def apply_input(self, client_id: str, buttons: int):
         """
         Apply a button bitmask from a client.
@@ -493,6 +499,29 @@ class GameSession:
         if client and client.player_num is not None:
             with self._input_lock:
                 self._inputs[client.player_num] = buttons
+
+    def set_player_num(self, client_id: str, player_num: int) -> bool:
+        """
+        Change which player slot a client controls (0-3).
+        Returns True if successful, False if slot is taken or invalid.
+        """
+        if player_num < 0 or player_num >= self.config.max_players:
+            return False
+        client = self._clients.get(client_id)
+        if not client:
+            return False
+        # Check if slot is already taken by another client
+        for cid, c in self._clients.items():
+            if cid != client_id and c.player_num == player_num:
+                return False
+        # Clear old slot
+        if client.player_num is not None:
+            with self._input_lock:
+                self._inputs[client.player_num] = 0
+        client.player_num = player_num
+        log.info("[%s] Client %s now controls player %d",
+                 self.session_id, client_id, player_num)
+        return True
 
     # ------------------------------------------------------------------
     # Memory watch

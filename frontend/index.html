@@ -530,6 +530,69 @@
     }
     .keybind-actions button.primary:hover { background: #ff2d55; }
 
+    /* ── Reset button (top right of game area) ── */
+    #reset-btn {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      background: rgba(26,26,46,0.85);
+      border: 1px solid #0f3460;
+      border-radius: 4px;
+      color: #aaa;
+      padding: 6px 14px;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 0.75rem;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      z-index: 10;
+      display: none;
+    }
+    #reset-btn:hover { border-color: #e94560; color: #e94560; }
+    #reset-btn.visible { display: block; }
+
+    /* ── Player selector ── */
+    #player-selector {
+      display: flex;
+      gap: 4px;
+      margin-top: 6px;
+    }
+    .player-slot-btn {
+      background: #1a1a1a;
+      border: 1px solid #333;
+      border-radius: 4px;
+      color: #666;
+      padding: 4px 10px;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 0.75rem;
+    }
+    .player-slot-btn:hover { border-color: #e94560; color: #e94560; }
+    .player-slot-btn.active { border-color: #00ff88; color: #00ff88; }
+    .player-slot-btn.taken { border-color: #555; color: #444; cursor: not-allowed; }
+
+    /* ── Audio indicator ── */
+    #audio-status {
+      font-size: 0.7rem;
+      color: #555;
+      margin-top: 4px;
+    }
+    #audio-status.playing { color: #00ff88; }
+    #audio-status.muted { color: #e94560; }
+    #unmute-btn {
+      background: #e94560;
+      border: none;
+      border-radius: 4px;
+      color: #fff;
+      padding: 4px 10px;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 0.75rem;
+      margin-left: 6px;
+      display: none;
+    }
+    #unmute-btn:hover { background: #ff2d55; }
+
     /* ── Controls hint ── */
     #controls-hint {
       padding: 6px 12px;
@@ -663,6 +726,7 @@
 <!-- Main content -->
 <main>
   <div id="game-area">
+    <button id="reset-btn">Reset</button>
     <video id="game-video" autoplay playsinline muted style="display:none;"></video>
     <canvas id="game-canvas" width="256" height="224"></canvas>
     <div id="overlay-message">
@@ -677,6 +741,7 @@
       <div id="player-list">
         <div class="player-row"><div class="player-dot"></div><span>Waiting...</span></div>
       </div>
+      <div id="player-selector"></div>
     </div>
 
     <!-- Memory watch -->
@@ -687,13 +752,15 @@
       </div>
     </div>
 
-    <!-- Voice -->
+    <!-- Voice / Audio -->
     <div class="panel-section">
-      <h3>Voice Chat</h3>
+      <h3>Audio</h3>
       <div id="voice-controls">
         <button class="voice-btn" id="mic-btn">Mic Off</button>
         <button class="voice-btn" id="deafen-btn">Audio On</button>
       </div>
+      <div id="audio-status">No game audio</div>
+      <button id="unmute-btn">Enable Audio</button>
     </div>
 
     <!-- Gamepad -->
@@ -816,6 +883,7 @@ let state = {
   memValues:   {},
 
   gamepadButtons: 0, // separate from keyboard
+  gameAudio:   null, // Audio element for game audio
 };
 
 // ── DOM refs ──
@@ -970,18 +1038,26 @@ async function connectWebRTC() {
     iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
   });
 
-  // Video track -> canvas
+  // Video/Audio tracks
   state.pc.ontrack = (e) => {
     if (e.track.kind === "video") {
       video.srcObject = e.streams[0];
       video.play().catch(() => {});
       overlay.style.display = "none";
+      $("reset-btn").classList.add("visible");
       renderVideoToCanvas();
     }
-    if (e.track.kind === "audio" && !state.deafened) {
-      const audio = new Audio();
-      audio.srcObject = e.streams[0];
-      audio.play().catch(() => {});
+    if (e.track.kind === "audio") {
+      state.gameAudio = new Audio();
+      state.gameAudio.srcObject = e.streams[0];
+      state.gameAudio.volume = 1.0;
+      // Try to play — may fail due to autoplay policy
+      state.gameAudio.play().then(() => {
+        updateAudioStatus("playing");
+      }).catch((err) => {
+        console.warn("Audio autoplay blocked:", err.message);
+        updateAudioStatus("blocked");
+      });
     }
   };
 
@@ -1031,6 +1107,7 @@ async function connectWebRTC() {
 
   saveSessionState();
   updatePlayerList();
+  renderPlayerSelector();
 }
 
 function renderVideoToCanvas() {
@@ -1282,6 +1359,10 @@ $("deafen-btn").addEventListener("click", () => {
   state.deafened = !state.deafened;
   $("deafen-btn").textContent = state.deafened ? "Audio Off" : "Audio On";
   $("deafen-btn").classList.toggle("muted", state.deafened);
+  if (state.gameAudio) {
+    state.gameAudio.muted = state.deafened;
+    updateAudioStatus(state.deafened ? "muted" : "playing");
+  }
 });
 
 // ============================================================
@@ -1711,6 +1792,104 @@ async function coreAction(action, name, btn) {
     btn.textContent = origText;
     btn.classList.remove("downloading");
     btn.disabled = false;
+  }
+}
+
+// ============================================================
+// Reset button
+// ============================================================
+
+$("reset-btn").addEventListener("click", async () => {
+  if (!state.sessionId) return;
+  if (!confirm("Reset the game?")) return;
+  try {
+    await fetch(`${state.serverUrl}/api/sessions/${state.sessionId}/reset`, {
+      method: "POST",
+    });
+  } catch (e) {
+    console.error("Reset failed:", e);
+  }
+});
+
+// ============================================================
+// Audio status & unmute
+// ============================================================
+
+function updateAudioStatus(status) {
+  const el = $("audio-status");
+  const btn = $("unmute-btn");
+  if (status === "playing") {
+    el.textContent = "Game audio playing";
+    el.className = "playing";
+    btn.style.display = "none";
+  } else if (status === "blocked") {
+    el.textContent = "Audio blocked by browser";
+    el.className = "muted";
+    btn.style.display = "inline-block";
+  } else if (status === "muted") {
+    el.textContent = "Audio muted";
+    el.className = "muted";
+    btn.style.display = "none";
+  } else {
+    el.textContent = "No game audio";
+    el.className = "";
+    btn.style.display = "none";
+  }
+}
+
+$("unmute-btn").addEventListener("click", () => {
+  if (state.gameAudio) {
+    state.gameAudio.play().then(() => {
+      updateAudioStatus("playing");
+    }).catch((err) => {
+      console.error("Still can't play audio:", err);
+    });
+  }
+});
+
+// ============================================================
+// Player number selector
+// ============================================================
+
+function renderPlayerSelector() {
+  const el = $("player-selector");
+  if (!state.connected || state.role !== "player") {
+    el.innerHTML = "";
+    return;
+  }
+  el.innerHTML = "";
+  for (let i = 0; i < 4; i++) {
+    const btn = document.createElement("button");
+    btn.className = "player-slot-btn";
+    btn.textContent = `P${i + 1}`;
+    if (state.playerNum === i) {
+      btn.classList.add("active");
+    }
+    btn.addEventListener("click", () => switchPlayerSlot(i));
+    el.appendChild(btn);
+  }
+}
+
+async function switchPlayerSlot(num) {
+  if (num === state.playerNum) return;
+  try {
+    const res = await fetch(
+      `${state.serverUrl}/api/sessions/${state.sessionId}/player`, {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({ client_id: state.clientId, player_num: num }),
+    });
+    if (res.ok) {
+      state.playerNum = num;
+      saveSessionState();
+      updatePlayerList();
+      renderPlayerSelector();
+    } else {
+      const err = await res.json();
+      console.warn("Can't switch to P" + (num+1) + ": " + err.detail);
+    }
+  } catch (e) {
+    console.error("Player switch failed:", e);
   }
 }
 
