@@ -215,11 +215,11 @@ class LibretroAudioTrack(AudioStreamTrack):
             num_samples = 960
             samples_array = np.zeros(num_samples * 2, dtype=np.int16)
 
-        # Reshape to (channels, samples) for av
-        stereo = samples_array.reshape(-1, 2).T  # shape: (2, num_samples)
+        # Reshape to (channels, samples) for av — planar format s16p
+        stereo = samples_array.reshape(-1, 2).T.copy()  # shape: (2, num_samples), contiguous
 
         frame = av.AudioFrame.from_ndarray(
-            stereo, format='s16', layout='stereo'
+            stereo, format='s16p', layout='stereo'
         )
         frame.sample_rate = self._sample_rate
         frame.pts = self._pts
