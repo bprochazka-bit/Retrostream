@@ -441,6 +441,25 @@ class GameSession:
             if pc.connectionState in ("failed", "closed", "disconnected"):
                 await self._remove_client(client_id)
 
+        # Handle input DataChannel (low-latency UDP/SCTP from client)
+        @pc.on("datachannel")
+        def on_datachannel(channel):
+            if channel.label == "input":
+                log.info("[%s] Input DataChannel opened for %s",
+                         self.session_id, client_id)
+
+                @channel.on("message")
+                def on_input_message(message):
+                    try:
+                        if isinstance(message, bytes) and len(message) >= 2:
+                            buttons = int.from_bytes(message[:2], "little")
+                        else:
+                            msg = json.loads(message)
+                            buttons = int(msg.get("buttons", 0))
+                        self.apply_input(client_id, buttons)
+                    except Exception as e:
+                        log.debug("Bad DC input: %s", e)
+
         # Handle incoming audio (voice chat) from client
         @pc.on("track")
         async def on_track(track: MediaStreamTrack):

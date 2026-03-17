@@ -1076,6 +1076,15 @@ async function connectWebRTC() {
         s === "closed")        { setStatus("disconnected"); state.connected = false; }
   };
 
+  // Create DataChannel for low-latency input (UDP/SCTP, no TCP Nagle)
+  state.inputDc = state.pc.createDataChannel("input", {
+    ordered: false,
+    maxRetransmits: 0,
+  });
+  state.inputDc.binaryType = "arraybuffer";
+  state.inputDc.onopen  = () => console.log("Input DataChannel open");
+  state.inputDc.onclose = () => console.log("Input DataChannel closed");
+
   state.pc.addTransceiver("video", { direction: "recvonly" });
   state.pc.addTransceiver("audio", { direction: "sendrecv" });
 
@@ -1140,20 +1149,32 @@ function connectInputWS() {
   };
 }
 
-// Coalesce input sends: at most one WS message per animation frame
-// to prevent message backpressure that causes progressive lag.
+// Send input over the WebRTC DataChannel (UDP/SCTP — no TCP Nagle lag).
+// Falls back to the WebSocket if the DataChannel isn't open yet.
+// Coalesces via RAF so at most one message per animation frame.
 let _inputDirty = false;
 let _inputRafId = 0;
+const _inputBuf = new ArrayBuffer(4);
+const _inputView = new DataView(_inputBuf);
 
 function _flushInput() {
   _inputRafId = 0;
-  if (state.inputWs?.readyState === WebSocket.OPEN && state.role === "player") {
+  _inputDirty = false;
+  if (state.role !== "player") return;
+
+  // Prefer DataChannel (unreliable/unordered UDP — lowest latency)
+  if (state.inputDc?.readyState === "open") {
+    _inputView.setUint16(0, state.buttons, true);
+    state.inputDc.send(_inputBuf);
+    return;
+  }
+  // Fallback to WebSocket
+  if (state.inputWs?.readyState === WebSocket.OPEN) {
     state.inputWs.send(JSON.stringify({
       client_id: state.clientId,
       buttons:   state.buttons,
     }));
   }
-  _inputDirty = false;
 }
 
 function sendInput() {
@@ -1497,6 +1518,9 @@ function disconnectSession() {
 
   // Cancel any pending input send
   if (_inputRafId) { cancelAnimationFrame(_inputRafId); _inputRafId = 0; }
+
+  // Close DataChannel
+  if (state.inputDc) { state.inputDc.close(); state.inputDc = null; }
 
   // Close all WebSockets
   if (state.inputWs)  { state.inputWs.close();  state.inputWs  = null; }
