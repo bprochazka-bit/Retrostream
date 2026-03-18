@@ -289,14 +289,11 @@ async def ws_input(websocket: WebSocket, session_id: str):
     """
     Receives input messages from a client and injects into the session.
 
-    Message format (JSON):
-        {"client_id": "abc123", "buttons": 512}
+    Accepts two formats:
+      - Binary: 2 bytes little-endian uint16 button bitmask (fastest)
+      - JSON text: {"client_id": "abc123", "buttons": 512}
 
-    buttons is a bitmask using RETRO_DEVICE_ID_JOYPAD_* bit positions.
-    The client_id must match one obtained from /rtc/offer.
-
-    Keyboard-to-button mapping is done client-side; this endpoint
-    only receives the resolved bitmask.
+    For binary mode, client_id is taken from the query param.
     """
     session = session_manager.get_session(session_id)
     if not session:
@@ -304,18 +301,43 @@ async def ws_input(websocket: WebSocket, session_id: str):
         return
 
     await websocket.accept()
+
+    # Disable Nagle's algorithm (TCP_NODELAY) to prevent buffering
+    try:
+        import socket as _socket
+        transport = websocket.scope.get("transport")
+        if transport is None:
+            # uvicorn stores transport on the ASGI connection scope
+            transport = getattr(
+                websocket.scope.get("app_connection", websocket), "_transport", None
+            )
+        if transport is not None:
+            sock = transport.get_extra_info("socket")
+            if sock is not None:
+                sock.setsockopt(_socket.IPPROTO_TCP, _socket.TCP_NODELAY, 1)
+                log.info("TCP_NODELAY set for input WS session=%s", session_id)
+    except Exception as e:
+        log.debug("Could not set TCP_NODELAY: %s", e)
+
     log.info("Input WS connected: session=%s", session_id)
+    client_id = websocket.query_params.get("client_id", "")
 
     try:
         while True:
-            raw = await websocket.receive_text()
-            try:
-                msg       = json.loads(raw)
-                client_id = msg.get("client_id", "")
-                buttons   = int(msg.get("buttons", 0))
-                session.apply_input(client_id, buttons)
-            except (json.JSONDecodeError, ValueError) as e:
-                log.debug("Bad input message: %s", e)
+            msg = await websocket.receive()
+            if msg.get("bytes"):
+                raw = msg["bytes"]
+                if len(raw) >= 2:
+                    buttons = int.from_bytes(raw[:2], "little")
+                    session.apply_input(client_id, buttons)
+            elif msg.get("text"):
+                try:
+                    data      = json.loads(msg["text"])
+                    client_id = data.get("client_id", client_id)
+                    buttons   = int(data.get("buttons", 0))
+                    session.apply_input(client_id, buttons)
+                except (json.JSONDecodeError, ValueError) as e:
+                    log.debug("Bad input message: %s", e)
     except WebSocketDisconnect:
         log.info("Input WS disconnected: session=%s", session_id)
 

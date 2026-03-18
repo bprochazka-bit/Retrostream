@@ -1141,7 +1141,10 @@ function renderVideoToCanvas() {
 
 function connectInputWS() {
   const wsUrl = state.serverUrl.replace(/^http/, "ws");
-  state.inputWs = new WebSocket(`${wsUrl}/ws/input/${state.sessionId}`);
+  state.inputWs = new WebSocket(
+    `${wsUrl}/ws/input/${state.sessionId}?client_id=${encodeURIComponent(state.clientId)}`
+  );
+  state.inputWs.binaryType = "arraybuffer";
   state.inputWs.onopen  = () => console.log("Input WS connected");
   state.inputWs.onerror = (e) => console.error("Input WS error", e);
   state.inputWs.onclose = () => {
@@ -1149,38 +1152,28 @@ function connectInputWS() {
   };
 }
 
-// Send input over the WebRTC DataChannel (UDP/SCTP — no TCP Nagle lag).
-// Falls back to the WebSocket if the DataChannel isn't open yet.
-// Coalesces via RAF so at most one message per animation frame.
-let _inputDirty = false;
-let _inputRafId = 0;
-const _inputBuf = new ArrayBuffer(4);
+// Input send — fire immediately on every state change.
+// DataChannel (SCTP/UDP) has no TCP Nagle, so immediate sends are fine.
+// WebSocket fallback uses binary + sends immediately too.
+const _inputBuf = new ArrayBuffer(2);
 const _inputView = new DataView(_inputBuf);
+let _lastSentButtons = -1;
 
-function _flushInput() {
-  _inputRafId = 0;
-  _inputDirty = false;
+function sendInput() {
   if (state.role !== "player") return;
+  if (state.buttons === _lastSentButtons) return;
+  _lastSentButtons = state.buttons;
 
-  // Prefer DataChannel (unreliable/unordered UDP — lowest latency)
+  // Prefer DataChannel (unreliable/unordered SCTP — lowest latency)
   if (state.inputDc?.readyState === "open") {
     _inputView.setUint16(0, state.buttons, true);
     state.inputDc.send(_inputBuf);
     return;
   }
-  // Fallback to WebSocket
+  // Fallback: WebSocket with binary frame (avoids JSON overhead)
   if (state.inputWs?.readyState === WebSocket.OPEN) {
-    state.inputWs.send(JSON.stringify({
-      client_id: state.clientId,
-      buttons:   state.buttons,
-    }));
-  }
-}
-
-function sendInput() {
-  _inputDirty = true;
-  if (!_inputRafId) {
-    _inputRafId = requestAnimationFrame(_flushInput);
+    _inputView.setUint16(0, state.buttons, true);
+    state.inputWs.send(_inputBuf);
   }
 }
 
@@ -1515,9 +1508,6 @@ function setStatus(s) {
 function disconnectSession() {
   if (!state.connected) return;
   state.connected = false;
-
-  // Cancel any pending input send
-  if (_inputRafId) { cancelAnimationFrame(_inputRafId); _inputRafId = 0; }
 
   // Close DataChannel
   if (state.inputDc) { state.inputDc.close(); state.inputDc = null; }
