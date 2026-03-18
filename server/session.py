@@ -253,8 +253,9 @@ class GameSession:
         self._running = False
 
         # Input state: player_num → button bitmask
+        # No lock needed — GIL makes dict[key]=val atomic, and the
+        # core loop snapshots via list() to avoid iteration issues.
         self._inputs: dict[int, int] = {i: 0 for i in range(4)}
-        self._input_lock = threading.Lock()
 
         # Shared tracks for all clients
         self._video_track: Optional[LibretroVideoTrack] = None
@@ -368,11 +369,16 @@ class GameSession:
         log.info("[%s] Core loop starting: fps=%.2f frame_time=%.4fs",
                  self.session_id, target_fps, frame_time)
 
+        # Spin-wait threshold: sleep most of the frame, then busy-wait
+        # the last 1ms for precise timing (matches cloud-game technique).
+        SPIN_THRESHOLD = 0.001  # 1ms
+
         while self._running:
-            # Apply merged inputs
-            with self._input_lock:
-                for player, buttons in self._inputs.items():
-                    self._core.set_input(player, buttons)
+            # Apply inputs — no lock needed, Python's GIL makes single
+            # dict reads/writes atomic.  Snapshot the dict to avoid
+            # iteration-during-mutation issues.
+            for player, buttons in list(self._inputs.items()):
+                self._core.set_input(player, buttons)
 
             frame_num += 1
             if frame_num <= 5:
@@ -388,11 +394,15 @@ class GameSession:
             if frame_num <= 5:
                 log.info("[%s] Frame #%d complete", self.session_id, frame_num)
 
-            # Precise frame pacing
+            # Precise frame pacing: sleep then spin-wait
             next_frame += frame_time
             sleep_for = next_frame - time.monotonic()
+            if sleep_for > SPIN_THRESHOLD:
+                time.sleep(sleep_for - SPIN_THRESHOLD)
             if sleep_for > 0:
-                time.sleep(sleep_for)
+                # Spin-wait for remaining time (sub-ms accuracy)
+                while time.monotonic() < next_frame:
+                    pass
             elif sleep_for < -frame_time * 3:
                 # We're more than 3 frames behind — reset pacing
                 next_frame = time.monotonic()
@@ -531,11 +541,11 @@ class GameSession:
         """
         Apply a button bitmask from a client.
         Maps client → their assigned player slot.
+        No lock needed — Python's GIL makes dict[key]=val atomic.
         """
         client = self._clients.get(client_id)
         if client and client.player_num is not None:
-            with self._input_lock:
-                self._inputs[client.player_num] = buttons
+            self._inputs[client.player_num] = buttons
 
     def set_player_num(self, client_id: str, player_num: int) -> bool:
         """
@@ -553,8 +563,7 @@ class GameSession:
                 return False
         # Clear old slot
         if client.player_num is not None:
-            with self._input_lock:
-                self._inputs[client.player_num] = 0
+            self._inputs[client.player_num] = 0
         client.player_num = player_num
         log.info("[%s] Client %s now controls player %d",
                  self.session_id, client_id, player_num)
@@ -589,8 +598,7 @@ class GameSession:
         client = self._clients.pop(client_id, None)
         if client:
             if client.player_num is not None:
-                with self._input_lock:
-                    self._inputs[client.player_num] = 0
+                self._inputs[client.player_num] = 0
             log.info("[%s] Client %s removed", self.session_id, client_id)
 
     @property
